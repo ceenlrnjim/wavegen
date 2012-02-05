@@ -1,4 +1,5 @@
-(ns wavegen.core)
+(ns wavegen.core
+  (:require [clojure.tools.logging :as log]))
 
 (defn empty-wave
 [name]
@@ -16,7 +17,7 @@
 (defn product 
   "Adds a product to the wave"
   [wave id description]
-  (assoc wave :products (assoc (:products wave) id {:desc description})))
+  (assoc wave :products (assoc (:products wave) id {:id id :desc description})))
 
 (defn score
    "Adds a score for a product"
@@ -43,12 +44,12 @@
       (if (empty? s) m (recur (assoc m (:id (first s)) (/ (:wt (first s)) total)) (rest s))))))
 
 (defn- compute-product-scores
-  [wave reqt weight]
+  [wave reqt-id weight]
   (map
     (fn [x]
-      (let [raw (get-score wave (:id x) (:id reqt))]
-        (vec (* weight raw) raw)))
-    (:products wave)))
+      (let [raw (get-score wave (:id x)  reqt-id)]
+        (vector (* weight raw) raw)))
+    (vals (:products wave))))
 
 (defn- compute-scores
   "Takes a bucketted map of requirements and adds the product-scores key with a vector of weighted and unweighted scores"

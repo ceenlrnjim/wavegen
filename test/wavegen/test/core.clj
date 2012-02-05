@@ -25,5 +25,5 @@
                      (reqt :two "2" 1 yesno "A" "X")
                      (product :A "Product A")
                      (score :A :one 1 :two 2))]
-    (is (= [0.5 1] (compute-product-scores w :one 0.5)))
-    (is (= [1 2] (compute-product-scores w :two 0.5)))))
+    (is (= [[0.5 1]] (compute-product-scores w :one 0.5)))
+    (is (= [[1.0 2]] (compute-product-scores w :two 0.5)))))
