@@ -52,13 +52,15 @@
     (vals (:products wave))))
 
 (defn- compute-scores
-  "Takes a bucketted map of requirements and adds the product-scores key with a vector of weighted and unweighted scores"
+  "Takes a wave and returns bucketed map of requirements with the additional computed-product-scores key with a vector of weighted and unweighted scores for each product"
   [wave]
   (let [reqts (vals (:requirements wave))
         weights (normalize-weights reqts)]
-    (map 
-      #(assoc % :computed-scores [])
-      reqts)))
+    (bucket-reqts
+      (assoc wave :requirements 
+             (map 
+              #(assoc % :computed-scores (compute-product-scores wave (:id %) ((:id %) weights)))
+              reqts)))))
 
 
 
