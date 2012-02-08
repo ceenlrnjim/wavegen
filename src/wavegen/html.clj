@@ -39,6 +39,11 @@
           #(= (first (first %)) cat) ; select only those elements where the categories match
           (group-by :categories (vals (:requirements wave))))))))
 
+(defn- requirements
+  "Returns a sequence of the requirements in the specified cat/subcat combination"
+  [wave cat subcat]
+  (get (group-by :categories (vals (:requriements wave))) [cat subcat]))
+
 (defn- subcat-weight
   [wave cat sub]
   nil)
@@ -47,9 +52,6 @@
   [wave cat subcat prod-ids]
   nil)
 
-(defn- requirements
-  [wave cat subcat]
-  nil)
 
 (defn- total-scores
   [wave prod-ids]
