@@ -53,11 +53,45 @@
                      (reqt :six "6" 1 {}  "B" "Z")
                      (reqt :seven "7" 1 {}  "B" "Y")
                      (reqt :eight "8" 1 {}  "B" "Y"))]
-    (doseq [r (requirements w "A" "X")]
-      (is (or (= (:id r) :one) (= (:id r) :two))))
-    (doseq [r (requirements w "A" "Y")]
-      (is (or (= (:id r) :three) (= (:id r) :four))))
-    (doseq [r (requirements w "B" "Z")]
-      (is (or (= (:id r) :five) (= (:id r) :six))))
-    (doseq [r (requirements w "B" "Y")]
-      (is (or (= (:id r) :seven) (= (:id r) :eight))))))
+    (let [rqts (requirements w "A" "X")]
+      (is (= (count rqts) 2))
+      (doseq [r rqts]
+        (is (or (= (:id r) :one) (= (:id r) :two)))))
+    (let [rqts (requirements w "B" "Z")]
+      (is (= (count rqts) 2))
+      (doseq [r rqts]
+        (is (or (= (:id r) :five) (= (:id r) :six)))))))
+
+(def reqt-weight (ns-resolve 'wavegen.html 'reqt-weight))
+(deftest test-reqt-weight
+  (let [w (with-wave "test"
+                     (reqt :one "1" 2 {} "A" "X")
+                     (reqt :two "2" 2 {} "A" "X")
+                     (reqt :three "3" 1 {}  "A" "Y")
+                     (reqt :four "4" 1 {}  "A" "Y")
+                     (reqt :five "5" 1 {}  "B" "Z")
+                     (reqt :six "6" 1 {}  "B" "Z")
+                     (reqt :seven "7" 1 {}  "B" "Y")
+                     (reqt :eight "8" 1 {}  "B" "Y"))]
+    (is (= (double (reqt-weight w (:one (:requirements w)))) 0.2))
+    (is (= (double (reqt-weight w (:two (:requirements w)))) 0.2))
+    (is (= (double (reqt-weight w (:three (:requirements w)))) 0.1))
+    (is (= (double (reqt-weight w (:seven (:requirements w)))) 0.1))))
+
+(def subcat-weight (ns-resolve 'wavegen.html 'subcat-weight))
+(deftest test-subcat-weight
+  (let [w (with-wave "test"
+                     (reqt :one "1" 2 {} "A" "X")
+                     (reqt :two "2" 2 {} "A" "X")
+                     (reqt :three "3" 1 {}  "A" "Y")
+                     (reqt :four "4" 1 {}  "A" "Y")
+                     (reqt :five "5" 1 {}  "B" "Z")
+                     (reqt :six "6" 1 {}  "B" "Z")
+                     (reqt :seven "7" 1 {}  "B" "Y")
+                     (reqt :eight "8" 1 {}  "B" "Y"))]
+    (is (= (double (subcat-weight w "A" "X")) 0.4))
+    (is (= (double (subcat-weight w "A" "Y")) 0.2))
+    (is (= (double (subcat-weight w "B" "Z")) 0.2))
+    (is (= (double (subcat-weight w "B" "Y")) 0.2))))
+
+

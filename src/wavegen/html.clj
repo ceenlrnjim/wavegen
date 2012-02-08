@@ -42,11 +42,20 @@
 (defn- requirements
   "Returns a sequence of the requirements in the specified cat/subcat combination"
   [wave cat subcat]
-  (get (group-by :categories (vals (:requriements wave))) [cat subcat]))
+  (get (group-by :categories (vals (:requirements wave))) [cat subcat]))
+
+(defn- reqt-weight
+  "Returns the percentage of total weight for this requirement"
+  [wave r]
+  (let [total (reduce #(+ %1 (:wt %2)) 0 (vals (:requirements wave)))]
+    (/ (:wt r) total)))
 
 (defn- subcat-weight
   [wave cat sub]
-  nil)
+  (reduce
+    #(+ %1 (reqt-weight wave %2)) ; TODO: need to get normalized weights
+    0
+    (requirements wave cat sub)))
 
 (defn- subcat-scores
   [wave cat subcat prod-ids]
