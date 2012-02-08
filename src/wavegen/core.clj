@@ -30,37 +30,3 @@
 
 (defn get-score [wave prod-id reqt-id]
   (get (get wave :scores) [prod-id reqt-id]))
-
-(defn- bucket-reqts
-  [wave]
-  (group-by :categories (vals (:requirements wave))))
-
-(defn- normalize-weights
-  "Takes a sequence requirements and returns a map of id to percentage weight (relative to the whole wave)"
-  [reqts]
-  (let [total (reduce #(+ %1 (:wt %2)) 0 reqts)]
-    (loop [m {}
-           s reqts]
-      (if (empty? s) m (recur (assoc m (:id (first s)) (/ (:wt (first s)) total)) (rest s))))))
-
-(defn- compute-product-scores
-  [wave reqt-id weight]
-  (map
-    (fn [x]
-      (let [raw (get-score wave (:id x)  reqt-id)]
-        (vector (* weight raw) raw)))
-    (vals (:products wave))))
-
-(defn- compute-scores
-  "Takes a wave and returns bucketed map of requirements with the additional computed-product-scores key with a vector of weighted and unweighted scores for each product"
-  [wave]
-  (let [reqts (vals (:requirements wave))
-        weights (normalize-weights reqts)]
-    (bucket-reqts
-      (assoc wave :requirements 
-             (map 
-              #(assoc % :computed-scores (compute-product-scores wave (:id %) ((:id %) weights)))
-              reqts)))))
-
-
-

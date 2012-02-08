@@ -94,4 +94,12 @@
     (is (= (double (subcat-weight w "B" "Z")) 0.2))
     (is (= (double (subcat-weight w "B" "Y")) 0.2))))
 
-
+(def weighted-score (ns-resolve 'wavegen.html 'weighted-score))
+(deftest test-weighted-score
+  (let [w (with-wave "test"
+            (reqt :one "1" 3 {} "A" "A")
+            (reqt :two "2" 1 {} "A" "A")
+            (product :A "prodA")
+            (score :A :one 1 :two 1))]
+    (is (= (double (weighted-score w :one :A)) 0.75))
+    (is (= (double (weighted-score w :two :A)) 0.25))))

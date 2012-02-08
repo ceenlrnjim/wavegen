@@ -2,17 +2,12 @@
   (:use [wavegen.core]))
 
 
-; {:type :header :product-names [Astera InfoSphere ...]} -> <tr class="header"><td>Req</td>...@@product-names@@
-; {:type :category1 :weight 46.7 (derived) :computed-scores [1.456 2.498 ...] }
-; {:type :category2 :weight 89.2 :computed-scores [...]}
-; {:type :reqt :text "abc" :criteria {...} :weight 2.6 (computed to relative) :computed-scores [[1 0.1] [0 0]}
-;
-; probably need to nest reqts and categories first then flatten
-
+; TODO: lots of calculations done over and over - need to optimize
 ; TODO: separate support functions that group and aggregate data from those responsible for generating html
 
 ;
 ; Data lookup and aggregation functions -----------------------------------------------------------
+; TODO: move these functions back to core
 ;
 (defn- prod-keys
   "returns an ordered list of the product ids in the wave"
@@ -50,17 +45,33 @@
   (let [total (reduce #(+ %1 (:wt %2)) 0 (vals (:requirements wave)))]
     (/ (:wt r) total)))
 
+(defn- weighted-score
+  "Returns the weighted score of the specified product/requirement"
+  [wave reqt-id prod-id]
+  (* (reqt-weight wave (get (:requirements wave) reqt-id)) (get-score wave reqt-id prod-id)))
+
 (defn- subcat-weight
+  "Returns the weight of the subcategory - the sum of the weights of the requirements in the sub category"
   [wave cat sub]
   (reduce
-    #(+ %1 (reqt-weight wave %2)) ; TODO: need to get normalized weights
+    #(+ %1 (reqt-weight wave %2))
     0
     (requirements wave cat sub)))
 
 (defn- subcat-scores
+  "Returns a map keyed by product id mapping to the sum of all scores for the requirements in this subcategory"
   [wave cat subcat prod-ids]
-  nil)
-
+  (reduce ; processes each product
+    (fn [score-sum-map pid]
+      (assoc 
+        score-sum-map 
+        pid 
+        (reduce ; processes each requirement
+          (fn [sum r]
+            (+ sum (weighted-score wave (:id r) pid)))
+          (requirements wave cat subcat))))
+    {}
+    prod-ids))
 
 (defn- total-scores
   [wave prod-ids]
@@ -74,8 +85,11 @@
     (subcategories wave cat)))
 
 (defn- category-scores
+  "returns a map keyed by product id whose value is the sum of the subcategory scores for that product"
   [wave cat prod-ids]
   nil)
+    ; get scores for this subcategory
+    ; add the score for each product to the total for each product
 
 
 ; TODO: move HTML snippets to resource file and use reader to load separate from code
