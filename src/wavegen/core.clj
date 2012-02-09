@@ -1,6 +1,7 @@
 (ns wavegen.core
   (:require [clojure.tools.logging :as log]))
 
+; TODO: could we have an alternate implementation of these functions that does the calculations as we go along?
 (defn empty-wave
 [name]
 {:name name :products {} :requirements {} :scores {}}) ; what is the ideal structure for scores

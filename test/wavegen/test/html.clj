@@ -103,3 +103,22 @@
             (score :A :one 1 :two 1))]
     (is (= (double (weighted-score w :one :A)) 0.75))
     (is (= (double (weighted-score w :two :A)) 0.25))))
+
+(def subcat-scores (ns-resolve 'wavegen.html 'subcat-scores))
+(deftest test-subcat-scores
+  (let [w (with-wave "test"
+            (reqt :one "1" 3 {} "A" "A")
+            (reqt :two "2" 3 {} "A" "A")
+            (reqt :three "3" 1 {} "A" "B")
+            (reqt :four "4" 1 {} "A" "B")
+            (product :prodA "prodA")
+            (product :prodB "prodB")
+            (score :prodA :one 1 :two 1 :three 1 :four 1)
+            (score :prodB :one 0 :two 1 :three 0 :four 2))
+        a-scores (subcat-scores w "A" "A" (prod-keys w))
+        b-scores (subcat-scores w "A" "B" (prod-keys w))]
+    (is (= (double (:prodA a-scores)) (double (+ (* (/ 3 8) 1) (* (/ 3 8) 1)))))
+    (is (= (double (:prodB a-scores)) (double (+ (* (/ 3 8) 0) (* (/ 3 8) 1)))))
+    (is (= (double (:prodA b-scores)) (double (+ (* (/ 1 8) 1) (* (/ 1 8) 1)))))
+    (is (= (double (:prodB b-scores)) (double (+ (* (/ 1 8) 0) (* (/ 1 8) 2)))))))
+    

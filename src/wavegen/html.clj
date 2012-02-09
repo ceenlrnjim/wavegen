@@ -69,6 +69,7 @@
         (reduce ; processes each requirement
           (fn [sum r]
             (+ sum (weighted-score wave (:id r) pid)))
+          0
           (requirements wave cat subcat))))
     {}
     prod-ids))
