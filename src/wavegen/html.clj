@@ -74,9 +74,6 @@
     {}
     prod-ids))
 
-(defn- total-scores
-  [wave prod-ids]
-  nil)
 
 (defn- category-weight
   [wave cat]
@@ -88,9 +85,24 @@
 (defn- category-scores
   "returns a map keyed by product id whose value is the sum of the subcategory scores for that product"
   [wave cat prod-ids]
+  (reduce ; process each product
+    (fn [score-sum-map pid]
+      (assoc
+        score-sum-map
+        pid
+        (reduce ; 3> Add together the score for each subcategory for the current product
+          (fn [sum sc-scores]
+            (+ sum (get sc-scores pid)))
+          0
+          (map ; 2> get scores for each subcategory
+            #(subcat-scores wave cat % prod-ids) 
+            (subcategories wave cat))))) ; 1> get all the subcategories
+    {}
+    prod-ids))
+
+(defn- total-scores
+  [wave prod-ids]
   nil)
-    ; get scores for this subcategory
-    ; add the score for each product to the total for each product
 
 
 ; TODO: move HTML snippets to resource file and use reader to load separate from code

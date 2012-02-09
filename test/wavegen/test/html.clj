@@ -121,4 +121,23 @@
     (is (= (double (:prodB a-scores)) (double (+ (* (/ 3 8) 0) (* (/ 3 8) 1)))))
     (is (= (double (:prodA b-scores)) (double (+ (* (/ 1 8) 1) (* (/ 1 8) 1)))))
     (is (= (double (:prodB b-scores)) (double (+ (* (/ 1 8) 0) (* (/ 1 8) 2)))))))
-    
+
+(def category-scores (ns-resolve 'wavegen.html 'category-scores))
+(deftest test-category-scores
+  (let [w (with-wave "test"
+            (reqt :one "1" 3 {} "A" "A")
+            (reqt :two "2" 3 {} "A" "B")
+            (reqt :three "3" 1 {} "A" "A")
+            (reqt :four "4" 1 {} "A" "B")
+            (product :prodA "prodA")
+            (product :prodB "prodB")
+            (score :prodA :one 1 :two 1 :three 1 :four 1)
+            (score :prodB :one 0 :two 1 :three 0 :four 2))
+        a-scores (category-scores w "A" (prod-keys w))
+        prod-a-subcat-a-score (double (+ (* (/ 3 8) 1) (* (/ 1 8) 1)))
+        prod-a-subcat-b-score (double (+ (* (/ 3 8) 1) (* (/ 1 8) 1)))
+        prod-b-subcat-a-score (double (+ (* (/ 3 8) 0) (* (/ 1 8) 0)))
+        prod-b-subcat-b-score (double (+ (* (/ 3 8) 1) (* (/ 1 8) 2)))]
+
+    (is (= (double (:prodA a-scores)) (+ prod-a-subcat-a-score prod-a-subcat-b-score)))
+    (is (= (double (:prodB a-scores)) (+ prod-b-subcat-a-score prod-b-subcat-b-score)))))
