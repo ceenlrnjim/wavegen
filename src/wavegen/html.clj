@@ -101,8 +101,22 @@
     prod-ids))
 
 (defn- total-scores
+  "returns a map keyed by product id whose value is the total weighted score for the product"
   [wave prod-ids]
-  nil)
+  (reduce
+    (fn [score-sum-map pid]
+      (assoc
+        score-sum-map
+        pid
+        (reduce
+          (fn [sum cat-scores]
+            (+ sum (get cat-scores pid)))
+          0
+          (map
+            #(category-scores wave % prod-ids)
+            (categories wave)))))
+    {}
+    prod-ids))
 
 
 ; TODO: move HTML snippets to resource file and use reader to load separate from code

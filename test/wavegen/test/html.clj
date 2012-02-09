@@ -141,3 +141,20 @@
 
     (is (= (double (:prodA a-scores)) (+ prod-a-subcat-a-score prod-a-subcat-b-score)))
     (is (= (double (:prodB a-scores)) (+ prod-b-subcat-a-score prod-b-subcat-b-score)))))
+
+(def total-scores (ns-resolve 'wavegen.html 'total-scores))
+(deftest test-total-scores
+  (let [w (with-wave "test"
+            (reqt :one "" 1 {} "c1" "c1s1")
+            (reqt :two "" 1 {} "c1" "c1s2")
+            (reqt :three "" 1 {} "c2" "c2s1")
+            (reqt :four "" 1 {} "c2" "c2s2")
+            (product :prodA "prodA")
+            (product :prodB "prodB")
+            (score :prodA :one 1 :two 1 :three 1 :four 1)
+            (score :prodB :one 0 :two 2 :three 1 :four 1))
+        totals (total-scores w (prod-keys w))]
+    (is (= (double (:prodA totals)) 1.0))
+    (is (= (double (:prodB totals)) 1.0))))
+
+
