@@ -48,7 +48,7 @@
 (defn- weighted-score
   "Returns the weighted score of the specified product/requirement"
   [wave reqt-id prod-id]
-  (* (reqt-weight wave (get (:requirements wave) reqt-id)) (get-score wave reqt-id prod-id)))
+  (* (reqt-weight wave (get (:requirements wave) reqt-id)) (get-score wave prod-id reqt-id)))
 
 (defn- subcat-weight
   "Returns the weight of the subcategory - the sum of the weights of the requirements in the sub category"
