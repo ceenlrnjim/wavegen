@@ -11,12 +11,12 @@
   "Replaces each of the tokens in the token/value pairs with the corresponding value in the specified string"
   [string & token-value-pairs]
   (if (empty? token-value-pairs) string
-    (recur (.replace string (first token-value-pairs) (second token-value-pairs)) (rest (rest token-value-pairs)))))
+    (recur (.replace string (str (first token-value-pairs)) (str (second token-value-pairs))) (rest (rest token-value-pairs)))))
 
 (defn- page
   "renders the page level html"
   [output wave]
-  (.append output "<html><head><link rel='stylesheet' href='wave.css'></head><body>"))
+  (.append output "<html><head><link rel='stylesheet' href='wave.css'></head><body><table>"))
 
 (def HEADER_LINE_1_HEADER "<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>")
 (def HEADER_PRODUCT_NAME "<td colspan='3'>~NAME~</td>")
@@ -47,9 +47,9 @@
 (defn- category
   "scores is a map of product id to weighted score"
   [output cat weight scores prod-ids]
-  (.append output (.replace (.replace CATEGORY_HEADER "~NAME~" cat) "~WEIGHT~" weight))
+  (.append output (replace-tokens CATEGORY_HEADER "~NAME~" cat "~WEIGHT~" weight))
   (doseq [pid prod-ids]
-    (.append output (.replace CATEGORY_PRODUCT_SCORE "~SCORE~" (get scores pid))))
+    (.append output (replace-tokens CATEGORY_PRODUCT_SCORE "~SCORE~" (get scores pid))))
   (.append output CATEGORY_TERMINATOR))
 
 
@@ -64,7 +64,7 @@
     (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (get scores pid))))
   (.append output SUBCATEGORY_TERMINATOR))
 
-(def REQT_HEADER "<tr class='requirement'><td/><td/><td/><td>~DESC~</td><td>~CRITERIA~</td><td>~WEIGHT</td><td/><td/>")
+(def REQT_HEADER "<tr class='requirement'><td/><td/><td/><td>~DESC~</td><td>~CRITERIA~</td><td>~WEIGHT~</td><td/><td/>")
 (def REQT_PRODUCT_SCORE "<td>~RAW~</td><td/><td>~SCORE~</td>")
 (def REQT_TERMINATOR "</tr>")
 (defn- requirement
@@ -74,13 +74,20 @@
     (.append output (replace-tokens REQT_PRODUCT_SCORE "~RAW~" (get-score wave pid (:id r)) "~SCORE~" (weighted-score wave (:id r) pid))))
   (.append output REQT_TERMINATOR))
 
+(def TOTAL_HEADER "<tr class='total'><td/><td/><td/><td/><td colspan='4'>Final Score:</td>")
+(def TOTAL_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
+(def TOTAL_TERMINATOR "</tr>")
+
 (defn- totals
-  [output scores]
-  nil)
+  [output scores prod-ids]
+  (.append output TOTAL_HEADER)
+  (doseq [pid prod-ids]
+    (.append output (replace-tokens TOTAL_PRODUCT_SCORE "~SCORE~" (get scores pid))))
+  (.append output TOTAL_TERMINATOR))
 
 (defn- end-page
   [output wave]
-  (.append output "</body></html"))
+  (.append output "</table></body></html>"))
 
 ; TODO: modify to support arbitrary number of categories
 (defn gen-html
@@ -96,6 +103,7 @@
         (subcategory output c sc (subcat-weight wave c sc) (subcat-scores wave c sc prodlist) prodlist)
         (doseq [r (requirements wave c sc)]
           (requirement output wave r prodlist))))
-    (totals output (total-scores wave prodlist))
-    (end-page output wave)))
+    (totals output (total-scores wave prodlist) prodlist)
+    (end-page output wave)
+    (.toString output)))
 
