@@ -123,6 +123,12 @@
 ;
 ; HTML generation functions ------------------------------------------------------------------------
 ;
+(defn- replace-tokens
+  "Replaces each of the tokens in the token/value pairs with the corresponding value in the specified string"
+  [string & token-value-pairs]
+  (if (empty? token-value-pairs) string
+    (recur (.replace string (first token-value-pairs) (second token-value-pairs)) (rest (rest token-value-pairs)))))
+
 (defn- page
   "renders the page level html"
   [output wave]
@@ -163,13 +169,26 @@
   (.append output CATEGORY_TERMINATOR))
 
 
+(def SUBCATEGORY_HEADER "<tr class='subcategory'><td/><td/><td colspan='3' class='subcategory-name'>~NAME~</td><td/><td class='subcategory-weight'>~WEIGHT~</td><td/>")
+(def SUBCATEGORY_PRODUCT_SCORE "<td/><td/><td~SCORE~</td>")
+(def SUBCATEGORY_TERMINATOR "</tr>")
+; TODO: very similar to category - refactor
 (defn- subcategory
-  [output cat sub weights scores]
-  nil)
+  [output cat sub weight scores prod-ids]
+  (.append output (replace-tokens SUBCATEGORY_HEADER "~NAME~" sub "~WEIGHT~" weight))
+  (doseq [pid prod-ids]
+    (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (get scores pid))))
+  (.append output SUBCATEGORY_TERMINATOR))
 
+(def REQT_HEADER "<tr class='requirement'><td/><td/><td/><td>~DESC~</td><td>~CRITERIA~</td><td>~WEIGHT</td><td/><td/>")
+(def REQT_PRODUCT_SCORE "<td>~RAW~</td><td/><td>~SCORE~</td>")
+(def REQT_TERMINATOR "</tr>")
 (defn- requirement
   [output wave r prod-ids]
-  nil)
+  (.append output (replace-tokens REQT_HEADER "~DESC~" (:desc r) "~CRITERIA~" (:scores r) "~WEIGHT~" (:wt r)))
+  (doseq [pid prod-ids]
+    (.append output (replace-tokens REQT_PRODUCT_SCORE "~RAW~" (get-score wave pid (:id r)) "~SCORE~" (weighted-score wave (:id r) pid))))
+  (.append output REQT_TERMINATOR))
 
 (defn- totals
   [output scores]
@@ -190,7 +209,7 @@
     (doseq [c (categories wave)]
       (category output c (category-weight wave c) (category-scores wave c prodlist) prodlist)
       (doseq [sc (subcategories wave c)]
-        (subcategory output c sc (subcat-weight wave c sc) (subcat-scores wave c sc prodlist))
+        (subcategory output c sc (subcat-weight wave c sc) (subcat-scores wave c sc prodlist) prodlist)
         (doseq [r (requirements wave c sc)]
           (requirement output wave r prodlist))))
     (totals output (total-scores wave prodlist))
