@@ -1,21 +1,16 @@
 (ns wavegen.cli
-  (:import [java.io FileOutputStream BufferedOutputStream])
+  (:import [java.io FileOutputStream BufferedOutputStream PushbackReader FileReader])
   (:use [wavegen.core])
   (:use [wavegen.html]))
 
-(defmacro generate-wave
-  "Macro to generate the code to handle the file writing - to keep the dsl feel for end users"
-  [title filename & body]
-  `(with-open [bos (BufferedOutputStream. (FileOutputStream. ~filename))]
-    (.write bos 
-      (.getBytes 
-        (gen-html
-          (with-wave ~title
-            ~@body))))
-    (.flush bos)))
-
-
 (defn -main [& args]
+  "Main entry point - takes a source clj file, evaluates to create a wave and then renders to html and saves to the 
+   file system"
   (let [[wavesrc title filename & more] args]
-    ; TODO: read the contents of wavesrc and then evaluate them to spit out a file
-    nil)
+    (println "Generating wave file" filename "from input " wavesrc)
+    (with-open [bos (BufferedOutputStream. (FileOutputStream. filename))]
+        (.write bos
+          (.getBytes
+            (gen-html
+              (load-file wavesrc))))
+        (.flush bos))))

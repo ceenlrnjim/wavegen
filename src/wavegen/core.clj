@@ -10,6 +10,8 @@
   [name & body]
   `(-> (empty-wave ~name) ~@body))
 
+; TODO: add standard score map definitions (e.g. ootb)
+
 (defn reqt 
   "Adds a requirement to the wave currently in context.  Must be executed in a with-wave block"
   [wave id description abs-weight score-map & categories]
