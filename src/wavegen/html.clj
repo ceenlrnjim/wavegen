@@ -65,7 +65,7 @@
     (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (.format formatter (get scores pid)))))
   (.append output SUBCATEGORY_TERMINATOR))
 
-(def REQT_HEADER "<tr class='requirement'><td/><td/><td/><td>~DESC~</td><td>~CRITERIA~</td><td>~WEIGHT~</td><td/><td/>")
+(def REQT_HEADER "<tr class='requirement'><td/><td/><td/><td>~DESC~</td><td class='criteria'>~CRITERIA~</td><td>~WEIGHT~</td><td/><td/>")
 (def REQT_PRODUCT_SCORE "<td>~RAW~</td><td/><td>~SCORE~</td>")
 (def REQT_TERMINATOR "</tr>")
 (defn- requirement

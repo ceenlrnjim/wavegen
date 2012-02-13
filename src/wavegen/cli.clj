@@ -7,7 +7,7 @@
   "Main entry point - takes a source clj file, evaluates to create a wave and then renders to html and saves to the 
    file system"
   (let [[wavesrc title filename & more] args]
-    (println "Generating wave file" filename "from input " wavesrc)
+    (println "Generating wave file" filename "from input" wavesrc)
     (with-open [bos (BufferedOutputStream. (FileOutputStream. filename))]
         (.write bos
           (.getBytes
