@@ -1,6 +1,9 @@
 (ns wavegen.core
   (:require [clojure.tools.logging :as log]))
 
+(def ootb {2 "Out of the box feature" 1 "Possible with limited effort" 0 "Not possible or requires significant effort"})
+(def yesno {2 "Yes" 0 "No"})
+;
 ; TODO: could we have an alternate implementation of these functions that does the calculations as we go along?
 (defn empty-wave
 [name]

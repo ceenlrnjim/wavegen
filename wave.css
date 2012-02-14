@@ -1,15 +1,26 @@
 
 body {
     font-family: "Arial";
+    width: 100%;
 }
 
 table {
     padding: 0px;
     border-spacing: 0px;
-    border-width: 1px;
-    border-color: #AAAAAA;
+    border: 1px solid #AAAAAA;
+    width: 100%;
 }
 
+tbody {
+}
+
+td {
+    border: 1px solid #AAAAAA;
+}
+
+tr.total {
+    font-weight: bold;
+}
 
 tr.header {
     color: white;
@@ -35,6 +46,9 @@ tr.subcategory {
 tr.requirement {
     color:black;
     font-size: 10pt;
+}
+td.linenum {
+    text-align: center;
 }
 
 td.criteria {
