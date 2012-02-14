@@ -1,7 +1,7 @@
 
 body {
     font-family: "Arial";
-    width: 100%;
+    /*width: 100%;*/
 }
 
 table {
@@ -46,6 +46,33 @@ tr.subcategory {
 tr.requirement {
     color:black;
     font-size: 10pt;
+}
+td.linenumlabel {
+}
+td.categorylabel {
+}
+td.subcategorylabel {
+}
+td.linenumlabel {
+}
+td.reqtlabel {
+}
+td.criterialabel {
+    width: 200px;
+}
+td.reqtwtlabel {
+}
+td.subcatwtlabel {
+}
+td.catwtlabel {
+}
+td.linenumlabel {
+}
+td.scorelabel {
+}
+td.noteslabel {
+}
+td.wtscorelabel {
 }
 td.linenum {
     text-align: center;
