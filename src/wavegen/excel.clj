@@ -89,6 +89,8 @@
         (.setFitHeight 1)
         (.setFitWidth 1))
       (header sheet wave)
+      ;(doseq [c (categories wave)]
+        ;(category sheet wave))
     wb))
 
 

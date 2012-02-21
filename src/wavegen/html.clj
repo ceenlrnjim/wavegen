@@ -100,7 +100,7 @@
   [output wave]
   (.append output "</tbody></table></body></html>"))
 
-; TODO: modify to support arbitrary number of categories
+; TODO: modify this to be a HOF that takes functions for rendering catgories, subcats, reqts, etc.
 (defn gen-html
   "returns a string containing the HTML representation of the wave"
   [wave]
