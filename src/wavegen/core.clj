@@ -38,3 +38,6 @@
   (let [score (get (get wave :scores) [prod-id reqt-id])]
     (if (nil? score) 0 score)))
 
+(defn product-desc [wave prod-id]
+  (:desc (get (:products wave) prod-id)))
+

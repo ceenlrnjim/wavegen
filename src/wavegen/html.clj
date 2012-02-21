@@ -12,7 +12,7 @@
 (def HEADER_PRODUCT_NAME "<td colspan='3'>~NAME~</td>")
 (def HEADER_LINE_1_TERMINATOR "</tr>\n")
 
-(def HEADER_LINE_2_HEADER "<tr class='header'><td class='linenumlabel'><td class='categorylabel'>Category</td><td class='subcategorylabel'>Sub-category</td><td class='reqtlabel'>Requirement</td><td class='criterialabel'>Evaluation Criteria</td><td class='reqtwtlabel'>Reqt</td><td class='subcatwtlabel'>Sub-cat</td><td class='catwtlabel'>Category</td>")
+(def HEADER_LINE_2_HEADER "<tr class='header'><td class='linenumlabel'></td><td class='categorylabel'>Category</td><td class='subcategorylabel'>Sub-category</td><td class='reqtlabel'>Requirement</td><td class='criterialabel'>Evaluation Criteria</td><td class='reqtwtlabel'>Reqt</td><td class='subcatwtlabel'>Sub-cat</td><td class='catwtlabel'>Category</td>")
 (def HEADER_LINE_2_PRODUCT_HEADER "<td class='scorelabel'>Score</td><td class='noteslabel'>Notes</td><td class='wtscorelabel'>Wgt Score</td>")
 (def HEADER_LINE_2_TERMINATOR "</tr>\n")
 
