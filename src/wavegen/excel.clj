@@ -61,14 +61,8 @@
         header2row (.createRow sheet header2rowix)]
     (addcell header1row 0 3 "" :header)
     (addcell header1row 4 6 "Weightings" :header)
-    (addcell header2row 0 "Category" :header)
-    (addcell header2row 1 "Sub-category" :header)
-    (addcell header2row 2 "Requirement" :header)
-    (addcell header2row 3 "Evaluation Criteria" :header)
-    (addcell header2row 4 "Reqt" :header)
-    (addcell header2row 5 "Sub-cat" :header)
-    (addcell header2row 6 "Category" :header)
     (addcells header1row 7 3 (map #(product-desc wave %) (prod-keys wave)) :header)
+    (addcells header2row 0 ["Category" "Sub-category" "Requirement" "Evaluation Criteria" "Reqt" "Sub-cat" "Category"] :header)
     (addcells header2row 7 (flatten (repeat (count (prod-keys wave)) ["Score" "Notes" "Wgt Score"])) :header)))
 
 
@@ -89,6 +83,7 @@
         (.setFitHeight 1)
         (.setFitWidth 1))
       (header sheet wave)
+      ; Probably need to start from the bottom up, need cell locations to build formulas
       ;(doseq [c (categories wave)]
         ;(category sheet wave))
     wb))
