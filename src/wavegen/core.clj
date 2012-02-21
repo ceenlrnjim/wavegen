@@ -35,4 +35,6 @@
             (rest (rest reqt-score-pairs)))))
 
 (defn get-score [wave prod-id reqt-id]
-  (get (get wave :scores) [prod-id reqt-id]))
+  (let [score (get (get wave :scores) [prod-id reqt-id])]
+    (if (nil? score) 0 score)))
+
