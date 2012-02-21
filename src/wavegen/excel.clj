@@ -33,6 +33,20 @@
       (.addMergedRegion (.getSheet row) (CellRangeAddress. (.getRowNum row) (.getRowNum row) cellstartix cellendix))
       cell)))
 
+(defn- addcells
+  "Adds a range of values of a specified width onto the end of a row"
+  ([row startix values style]
+    (let [counter (atom -1)]
+      (doseq [v values]
+        (addcell row (+ startix (swap! counter inc)) v style))))
+  ([row startix width values style]
+    (let [counter (atom (- startix width))]
+      (doseq [v values]
+        (let [ix1 (swap! counter + width)
+              ix2 (+ ix1 width -1)]
+          (println "Adding cell" v "from" ix1 "to" ix2)
+          (addcell row ix1 ix2 v style))))))
+
 (defn- nextrowid
   "Returns next row id as an int"
   []
@@ -54,14 +68,8 @@
     (addcell header2row 4 "Reqt" :header)
     (addcell header2row 5 "Sub-cat" :header)
     (addcell header2row 6 "Category" :header)
-    (let [cell-counter (atom 4)]
-      (doseq [pid (prod-keys wave)]
-        (let [startix (swap! cell-counter + 3)
-              endix (+ 2 startix)]
-          (addcell header1row startix endix (product-desc wave pid) :header)
-          (addcell header2row startix "Score" :header)
-          (addcell header2row (inc startix) "Notes" :header)
-          (addcell header2row (+ 2 startix) "Wgt Score" :header))))))
+    (addcells header1row 7 3 (map #(product-desc wave %) (prod-keys wave)) :header)
+    (addcells header2row 7 (flatten (repeat (count (prod-keys wave)) ["Score" "Notes" "Wgt Score"])) :header)))
 
 
 (defn gen-excel
