@@ -3,6 +3,9 @@
   (:use [wavegen.aggr]))
 
 (def formatter (java.text.DecimalFormat. "#0.0#"))
+(defn decfmt 
+  "Returns the specific number as a standard format string"
+  [d] (.format formatter d))
 
 ; TODO: move HTML snippets to resource file and use reader to load separate from code
 (def HEADER_LINE_1_HEADER "<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>")
@@ -62,31 +65,35 @@
 (defn- category
   "scores is a map of product id to weighted score"
   [output cat weight scores prod-ids linenum]
-  (.append output (replace-tokens CATEGORY_HEADER "~LINE~" linenum "~NAME~" cat "~WEIGHT~" (.format formatter weight)))
+  (.append output (replace-tokens CATEGORY_HEADER 
+                                  "~LINE~" linenum 
+                                  "~NAME~" cat 
+                                  "~WEIGHT~" (decfmt weight)))
   (doseq [pid prod-ids]
-    (.append output (replace-tokens CATEGORY_PRODUCT_SCORE "~SCORE~" (.format formatter (get scores pid)))))
+    (.append output (replace-tokens CATEGORY_PRODUCT_SCORE 
+                                    "~SCORE~" (decfmt (get scores pid)))))
   (.append output CATEGORY_TERMINATOR))
 
 ; TODO: very similar to category - refactor
 (defn- subcategory
   [output cat sub weight scores prod-ids linenum]
-  (.append output (replace-tokens SUBCATEGORY_HEADER "~LINE~" linenum "~NAME~" sub "~WEIGHT~" (.format formatter weight)))
+  (.append output (replace-tokens SUBCATEGORY_HEADER "~LINE~" linenum "~NAME~" sub "~WEIGHT~" (decfmt weight)))
   (doseq [pid prod-ids]
-    (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (.format formatter (get scores pid)))))
+    (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (decfmt (get scores pid)))))
   (.append output SUBCATEGORY_TERMINATOR))
 
 (defn- requirement
   [output wave r prod-ids linenum]
-  (.append output (replace-tokens REQT_HEADER "~LINE~" linenum "~DESC~" (:desc r) "~CRITERIA~" (:scores r) "~WEIGHT~" (.format formatter (reqt-weight wave r))))
+  (.append output (replace-tokens REQT_HEADER "~LINE~" linenum "~DESC~" (:desc r) "~CRITERIA~" (:scores r) "~WEIGHT~" (decfmt (reqt-weight wave r))))
   (doseq [pid prod-ids]
-    (.append output (replace-tokens REQT_PRODUCT_SCORE "~RAW~" (get-score wave pid (:id r)) "~SCORE~" (.format formatter (weighted-score wave (:id r) pid)))))
+    (.append output (replace-tokens REQT_PRODUCT_SCORE "~RAW~" (get-score wave pid (:id r)) "~SCORE~" (decfmt (weighted-score wave (:id r) pid)))))
   (.append output REQT_TERMINATOR))
 
 (defn- totals
   [output scores prod-ids]
   (.append output TOTAL_HEADER)
   (doseq [pid prod-ids]
-    (.append output (replace-tokens TOTAL_PRODUCT_SCORE "~SCORE~" (.format formatter (get scores pid)))))
+    (.append output (replace-tokens TOTAL_PRODUCT_SCORE "~SCORE~" (decfmt (get scores pid)))))
   (.append output TOTAL_TERMINATOR))
 
 (defn- end-page
