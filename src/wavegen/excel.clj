@@ -187,11 +187,13 @@
                          ""] ; cat-weight
                          :requirement)
     (doseq [pid (itemixseq (prod-keys wave))]
-      (add-value-cells reqtrow (+ 7 (* 3 (first pid))) 
-                        [(double (get-score wave (second pid) (:id r))) ;raw score
-                         "" ; notes
-                         (double (weighted-score wave (:id r) (second pid)))] ;weighted score
-                         :requirement))
+      (let [scorecol (+ 7 (* 3 (first pid)))
+            adjustedrownum (+ 1 (.getRowNum reqtrow))]
+        (add-value-cells reqtrow scorecol
+                          [(double (get-score wave (second pid) (:id r))) ;raw score
+                         ""] ; notes
+                         :requirement)
+        (add-formula-cell reqtrow (+ 2 scorecol) (str "$e" adjustedrownum "*" (col-letter scorecol) adjustedrownum)  :requirement)))
     (.getRowNum reqtrow)))
 
 
