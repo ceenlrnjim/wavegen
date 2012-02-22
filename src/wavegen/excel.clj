@@ -29,11 +29,17 @@
   (doto (.createCellStyle wb)
     (.setAlignment CellStyle/ALIGN_LEFT)))
 
+(defn- total-style
+  [wb]
+  (doto (.createCellStyle wb)
+    (.setAlignment CellStyle/ALIGN_LEFT)))
+
 (defn- init-styles
   [wb]
   (swap! cellstyles assoc :header (header-style wb))
   (swap! cellstyles assoc :subcategory (subcat-style wb))
   (swap! cellstyles assoc :category (cat-style wb))
+  (swap! cellstyles assoc :totals (total-style wb))
   (swap! cellstyles assoc :requirement (reqt-style wb)))
 
 (defn- addcell
@@ -174,6 +180,16 @@
         (add-formula-cell catrow valcolix (list-formula "sum" (col-letter valcolix) subcat-row-nums) :category)))
     (.getRowNum catrow)))
 
+(defn- totals
+  "Adds a row and cells for the grand total line"
+  [sheet wave cat-row-nums]
+  (let [totalrow (.createRow sheet (nextrowid))]
+    (add-value-cell totalrow 3 6 "Totals" :totals)
+    (doseq [pid (itemixseq (prod-keys wave))]
+      (let [valcolix (+ 9 (* 3 (first pid)))]
+        (add-formula-cell totalrow valcolix (list-formula "sum" (col-letter valcolix) cat-row-nums) :totals)))))
+
+
 
 ; TODO: break up this nested mess of maps and reduces into set of legible functions
 (defn gen-excel
@@ -193,20 +209,21 @@
         (.setFitHeight 1)
         (.setFitWidth 1))
       (header sheet wave)
-      ; TODO: grand totals
-      (doseq [c (categories wave)]
-        ; need to reserve the row for the category
-        (let [catrowix (nextrowid)]
-          (category c sheet catrowix wave
-            (reduce #(conj %1 %2) [] ; build a vector of row numbers of subcategories
-                    (map ; convert from subcategory name to line number (with cell/row addition side effects)
-                      (fn [subcat] 
-                        (subcategory subcat sheet (nextrowid) wave
-                        (reduce #(conj %1 %2) [];  build a vector of row numbers to be used in cell formulas
-                                (map  ;convert from requirements data structure to line numbers (with cell addition side effects)
-                                  #(requirement sheet wave c subcat %) 
-                                  (requirements wave c subcat)))))
-                      (subcategories wave c))))))
+      (totals sheet wave 
+        (reduce #(conj %1 %2) [] ; build vector of row numbers for categories
+          (map ; convert from category name to line number (with cell/row addition side effects)
+            (fn [c]
+              (category c sheet (nextrowid) wave
+                (reduce #(conj %1 %2) [] ; build a vector of row numbers of subcategories
+                        (map ; convert from subcategory name to line number (with cell/row addition side effects)
+                          (fn [subcat] 
+                            (subcategory subcat sheet (nextrowid) wave
+                            (reduce #(conj %1 %2) [];  build a vector of row numbers to be used in cell formulas
+                                    (map  ;convert from requirements data structure to line numbers (with cell addition side effects)
+                                      #(requirement sheet wave c subcat %) 
+                                      (requirements wave c subcat)))))
+                          (subcategories wave c)))))
+            (categories wave))))
     wb))
 
 
