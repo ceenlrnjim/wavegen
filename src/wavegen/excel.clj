@@ -1,5 +1,5 @@
 (ns wavegen.excel
-  (:import [org.apache.poi.ss.usermodel Workbook CellStyle])
+  (:import [org.apache.poi.ss.usermodel Workbook CellStyle Font])
   (:import [org.apache.poi.hssf.usermodel HSSFWorkbook HSSFFont])
   (:import [org.apache.poi.hssf.util HSSFColor HSSFColor$WHITE HSSFColor$DARK_BLUE HSSFColor$BLUE HSSFColor$LIGHT_BLUE])
   (:import [org.apache.poi.ss.util CellRangeAddress])
@@ -53,19 +53,25 @@
     (.setAlignment CellStyle/ALIGN_LEFT)))
 
 (defn- total-style
-  [wb]
+  [wb font]
   (doto (.createCellStyle wb)
+    (.setFont font)
+    (.setBorderTop CellStyle/BORDER_THICK)
     (.setAlignment CellStyle/ALIGN_LEFT)))
 
 (defn- init-styles
   [wb]
-  (let [headerfont (.createFont wb)]
+  (let [headerfont (.createFont wb)
+        totalfont (.createFont wb)]
     (doto headerfont
       (.setColor HSSFColor$WHITE/index))
+    (doto totalfont
+      (.setFontHeightInPoints 14)
+      (.setBoldweight Font/BOLDWEIGHT_BOLD))
     (swap! cellstyles assoc :header (header-style wb headerfont))
     (swap! cellstyles assoc :subcategory (subcat-style wb headerfont))
     (swap! cellstyles assoc :category (cat-style wb headerfont))
-    (swap! cellstyles assoc :totals (total-style wb))
+    (swap! cellstyles assoc :totals (total-style wb totalfont))
     (swap! cellstyles assoc :requirement (reqt-style wb))))
 
 
@@ -229,9 +235,10 @@
   "Adds a row and cells for the grand total line"
   [sheet wave cat-row-nums]
   (let [totalrow (.createRow sheet (nextrowid))]
-    (add-value-cell totalrow 3 6 "Totals" :totals)
+    (add-value-cell totalrow 6 "Totals" :totals)
     (doseq [pid (itemixseq (prod-keys wave))]
       (let [valcolix (+ 9 (* 3 (first pid)))]
+        (add-value-cells totalrow (- valcolix 2) ["" ""] :totals)
         (add-formula-cell totalrow valcolix (list-formula "sum" (col-letter valcolix) cat-row-nums) :totals)))))
 
 
