@@ -24,10 +24,16 @@
   (doto (.createCellStyle wb)
     (.setAlignment CellStyle/ALIGN_LEFT)))
 
+(defn- cat-style
+  [wb]
+  (doto (.createCellStyle wb)
+    (.setAlignment CellStyle/ALIGN_LEFT)))
+
 (defn- init-styles
   [wb]
   (swap! cellstyles assoc :header (header-style wb))
   (swap! cellstyles assoc :subcategory (subcat-style wb))
+  (swap! cellstyles assoc :category (cat-style wb))
   (swap! cellstyles assoc :requirement (reqt-style wb)))
 
 (defn- addcell
@@ -60,7 +66,6 @@
   ; Adds a row that spans the specified cell indices
   ([row cellstartix cellendix formula stylekey]
     (addcell row cellstartix cellendix formula stylekey #(.setCellFormula %1 %2))))
-
 
 (defn- add-value-cells
   "Adds a range of values of a specified width onto the end of a row"
@@ -126,6 +131,16 @@
   [formula column-letter rows]
   (str formula "($" column-letter (+ 1 (apply min rows)) ":$" column-letter (+ 1 (apply max rows)) ")"))
 
+(defn- list-formula
+  "Returns the formula over the specified list of 0-indexed row numbers"
+  [formula column-letter rows]
+  (str 
+    (reduce
+      #(str %1 "," %2)
+      (str formula "(")
+      (map #(str "$" column-letter (+ 1 %)) rows))
+    ")"))
+
 (def letter-lookup (reduce #(assoc %1 (first %2) (second %2)) {} (map-indexed #(vector %1 %2) "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))
 
 (defn- col-letter
@@ -134,8 +149,8 @@
   (get letter-lookup i))
 
 (defn- subcategory
-  "Adds a row and cells for the specified subcategory over the specified row ids"
-  [subcat sheet  subcatrowix wave reqt-row-nums]
+  "Adds a row and cells for the specified subcategory over the specified row ids - returns the index for this row"
+  [subcat sheet subcatrowix wave reqt-row-nums]
   (let [subcatrow (.createRow sheet subcatrowix)]
     (add-value-cell subcatrow 0 "" :subcategory)
     (add-value-cell subcatrow 1 3 subcat :subcategory)
@@ -144,11 +159,23 @@
     (add-value-cell subcatrow 6 "" :subcategory)
     (doseq [pid (itemixseq (prod-keys wave))]
       (let [valcolix (+ 9 (* 3 (first pid)))]
-        (add-value-cells subcatrow 7 ["" ""] :subcategory)
         (add-formula-cell subcatrow valcolix (range-formula "sum" (col-letter valcolix) reqt-row-nums) :subcategory)))
     (.getRowNum subcatrow)))
 
+(defn- category
+  "Adds a row and cells for the specified category - returns the index for this row"
+  [cat sheet catrowix wave subcat-row-nums]
+  (let [catrow (.createRow sheet catrowix)]
+    (add-value-cell catrow 0 3 cat :category)
+    (add-value-cells catrow 4 ["" ""] :category)
+    (add-formula-cell catrow 6 (list-formula "sum" (col-letter 5) subcat-row-nums) :category)
+    (doseq [pid (itemixseq (prod-keys wave))]
+      (let [valcolix (+ 9 (* 3 (first pid)))]
+        (add-formula-cell catrow valcolix (list-formula "sum" (col-letter valcolix) subcat-row-nums) :category)))
+    (.getRowNum catrow)))
 
+
+; TODO: break up this nested mess of maps and reduces into set of legible functions
 (defn gen-excel
   "Returns a Workbook that represents the wave format in excel form"
   [wave]
@@ -166,24 +193,20 @@
         (.setFitHeight 1)
         (.setFitWidth 1))
       (header sheet wave)
-      ; Probably need to start from the bottom up, need cell locations to build formulas
+      ; TODO: grand totals
       (doseq [c (categories wave)]
         ; need to reserve the row for the category
         (let [catrowix (nextrowid)]
-          (doseq [s (subcategories wave c)]
-            ; need to reserve the row for sub-category before generating the requirements
-            (let [subcatrowix (nextrowid)]
-              (subcategory s sheet subcatrowix wave
-                (reduce #(conj %1 %2) ; build a vector of row numbers to be used in cell formulas
-                        [] 
-                        (map  ;convert from requirements data structure to line numbers (with cell addition side effects)
-                          #(requirement sheet wave c s %) 
-                          (requirements wave c s))))
-            )
-          )
-        )
-        ;(category sheet wave))
-      )
+          (category c sheet catrowix wave
+            (reduce #(conj %1 %2) [] ; build a vector of row numbers of subcategories
+                    (map ; convert from subcategory name to line number (with cell/row addition side effects)
+                      (fn [subcat] 
+                        (subcategory subcat sheet (nextrowid) wave
+                        (reduce #(conj %1 %2) [];  build a vector of row numbers to be used in cell formulas
+                                (map  ;convert from requirements data structure to line numbers (with cell addition side effects)
+                                  #(requirement sheet wave c subcat %) 
+                                  (requirements wave c subcat)))))
+                      (subcategories wave c))))))
     wb))
 
 
