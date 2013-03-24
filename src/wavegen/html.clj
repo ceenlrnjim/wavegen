@@ -101,6 +101,7 @@
   (.append output "</tbody></table></body></html>"))
 
 ; TODO: modify this to be a HOF that takes functions for rendering catgories, subcats, reqts, etc.
+(comment
 (defn gen-html
   "returns a string containing the HTML representation of the wave"
   [wave]
@@ -118,4 +119,40 @@
     (totals output (total-scores wave prodlist) prodlist)
     (end-page output wave)
     (.toString output)))
+  )
+
+(defn score-cols
+  [{:keys [prodid score reqtid]}]
+  (println prodid score reqtid)
+  {})
+    ;{ (keyword (str "score" prodid)) score })
+
+(defn denormalize-scores
+  [scores prods reqts]
+  (if (empty? prods) reqts
+    (let [{prodid :prodid} (first prods)]
+      (println "denormalizing product " prodid)
+      (recur 
+        scores 
+        (rest prods)
+        ; TODO: select here isn't working properly - returning no value
+        (rels/append reqts #(score-cols (rels/select-single scores {} :prodid prodid :reqtid {:reqtid %})))))))
+
+(defn build-wave-relation
+  [{:keys [scores products requirements]}]
+  ; join requirements, products, and scores
+  ; de-normalize products and requirements
+  ; cat subcat reqt criteria [rw scw cw]*
+  (println scores)
+  (let [ds (denormalize-scores scores products requirements)]
+    ds))
+
+
+
+(defn gen-html
+  "returns a string containing the HTML representation of the wave"
+  [wave]
+  (doseq [i (build-wave-relation wave)] (println i))
+
+  nil)
 

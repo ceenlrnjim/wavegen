@@ -1,4 +1,5 @@
 (ns wavegen.core
+  (:require [rels])
   (:require [clojure.tools.logging :as log]))
 
 (def ootb {2 "Out of the box feature" 1 "Possible with limited effort" 0 "Not possible or requires significant effort"})
@@ -6,8 +7,8 @@
 ;
 ; TODO: could we have an alternate implementation of these functions that does the calculations as we go along?
 (defn empty-wave
-[name]
-{:name name :products {} :requirements {} :scores {}}) ; what is the ideal structure for scores
+  [name]
+  {:name name :products [] :requirements [] :scores []}) ; what is the ideal structure for scores
 
 (defmacro with-wave 
   [name & body]
@@ -17,27 +18,27 @@
 
 (defn reqt 
   "Adds a requirement to the wave currently in context.  Must be executed in a with-wave block"
-  [wave id description abs-weight score-map & categories]
-  (assoc wave :requirements (assoc (:requirements wave) id {:id id :desc description :wt abs-weight :scores score-map :categories categories})))
+  [wave id description abs-weight score-map cat subcat]
+  (assoc wave :requirements (conj (:requirements wave) {:reqtid id :reqtdesc description :wt abs-weight :scores score-map :category cat :subcategory subcat})))
 
 (defn product 
   "Adds a product to the wave"
   [wave id description]
-  (assoc wave :products (assoc (:products wave) id {:id id :desc description})))
+  (assoc wave :products (conj (:products wave) {:prodid id :proddesc description})))
 
 (defn score
    "Adds a score for a product"
    [wave prod-id & reqt-score-pairs]
    (if
      (empty? reqt-score-pairs) wave
-     (recur (assoc wave :scores (assoc (:scores wave) [prod-id (first reqt-score-pairs)] (second reqt-score-pairs)))
+     (recur (assoc wave :scores 
+                   (conj (:scores wave) {:prodid prod-id :reqtid (first reqt-score-pairs) :score (second reqt-score-pairs)}))
             prod-id
-            (rest (rest reqt-score-pairs)))))
+            (drop 2 reqt-score-pairs))))
 
 (defn get-score [wave prod-id reqt-id]
-  (let [score (get (get wave :scores) [prod-id reqt-id])]
-    (if (nil? score) 0 score)))
+  (rels/select-single (:scores wave) 0 :prodid prod-id))
 
 (defn product-desc [wave prod-id]
-  (:desc (get (:products wave) prod-id)))
+  (:desc (rels/select-single (:products wave) {} :prodid prod-id)))
 
