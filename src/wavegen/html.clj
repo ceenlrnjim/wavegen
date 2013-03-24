@@ -32,107 +32,13 @@
 (def TOTAL_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
 (def TOTAL_TERMINATOR "</tr>\n")
 
-;
-; HTML generation functions ------------------------------------------------------------------------
-;
-(defn- replace-tokens
-  "Replaces each of the tokens in the token/value pairs with the corresponding value in the specified string"
-  [string & token-value-pairs]
-  (if (empty? token-value-pairs) string
-    (recur (.replace string (str (first token-value-pairs)) (str (second token-value-pairs))) (rest (rest token-value-pairs)))))
-
-(defn- page
-  "renders the page level html"
-  [output wave]
-  (.append output "<html><head><link rel='stylesheet' href='wave.css'></head><body><table><tbody>"))
-
-
-; TODO: can I create a protocol for these things that I can use for CSV, etc.?
-(defn- header
-  "Generates an html header row and appends to the specified string builder"
-  [output wave prodkeys]
-  ; Total cells = 8 * (3 + # products)
-  (.append output HEADER_LINE_1_HEADER)
-  (doseq [pid prodkeys]
-    (.append output (.replace HEADER_PRODUCT_NAME "~NAME~" (:desc (get (:products wave) pid)))))
-  (.append output HEADER_LINE_1_TERMINATOR)
-  (.append output HEADER_LINE_2_HEADER)
-  (doseq [pid prodkeys]
-    (.append output HEADER_LINE_2_PRODUCT_HEADER))
-  (.append output HEADER_LINE_2_TERMINATOR))
-
-
-(defn- category
-  "scores is a map of product id to weighted score"
-  [output cat weight scores prod-ids linenum]
-  (.append output (replace-tokens CATEGORY_HEADER 
-                                  "~LINE~" linenum 
-                                  "~NAME~" cat 
-                                  "~WEIGHT~" (decfmt weight)))
-  (doseq [pid prod-ids]
-    (.append output (replace-tokens CATEGORY_PRODUCT_SCORE 
-                                    "~SCORE~" (decfmt (get scores pid)))))
-  (.append output CATEGORY_TERMINATOR))
-
-; TODO: very similar to category - refactor
-(defn- subcategory
-  [output cat sub weight scores prod-ids linenum]
-  (.append output (replace-tokens SUBCATEGORY_HEADER "~LINE~" linenum "~NAME~" sub "~WEIGHT~" (decfmt weight)))
-  (doseq [pid prod-ids]
-    (.append output (replace-tokens SUBCATEGORY_PRODUCT_SCORE "~SCORE~" (decfmt (get scores pid)))))
-  (.append output SUBCATEGORY_TERMINATOR))
-
-(defn- requirement
-  [output wave r prod-ids linenum]
-  (.append output (replace-tokens REQT_HEADER "~LINE~" linenum "~DESC~" (:desc r) "~CRITERIA~" (:scores r) "~WEIGHT~" (decfmt (reqt-weight wave r))))
-  (doseq [pid prod-ids]
-    (.append output (replace-tokens REQT_PRODUCT_SCORE "~RAW~" (get-score wave pid (:id r)) "~SCORE~" (decfmt (weighted-score wave (:id r) pid)))))
-  (.append output REQT_TERMINATOR))
-
-(defn- totals
-  [output scores prod-ids]
-  (.append output TOTAL_HEADER)
-  (doseq [pid prod-ids]
-    (.append output (replace-tokens TOTAL_PRODUCT_SCORE "~SCORE~" (decfmt (get scores pid)))))
-  (.append output TOTAL_TERMINATOR))
-
-(defn- end-page
-  [output wave]
-  (.append output "</tbody></table></body></html>"))
-
-; TODO: modify this to be a HOF that takes functions for rendering catgories, subcats, reqts, etc.
-(comment
-(defn gen-html
-  "returns a string containing the HTML representation of the wave"
-  [wave]
-  (let [output (StringBuilder.)
-        prodlist (prod-keys wave)
-        counter (atom 0)]
-    (page output wave)
-    (header output wave prodlist)
-    (doseq [c (categories wave)]
-      (category output c (category-weight wave c) (category-scores wave c prodlist) prodlist (swap! counter inc))
-      (doseq [sc (subcategories wave c)]
-        (subcategory output c sc (subcat-weight wave c sc) (subcat-scores wave c sc prodlist) prodlist (swap! counter inc))
-        (doseq [r (requirements wave c sc)]
-          (requirement output wave r prodlist (swap! counter inc)))))
-    (totals output (total-scores wave prodlist) prodlist)
-    (end-page output wave)
-    (.toString output)))
-  )
-
-(defn score-cols
-  [{:keys [prodid score reqtid]}]
-    { (keyword (str "score" (name prodid))) score })
-
 (defn denormalize-scores
   [scores prods reqts]
-  (if (empty? prods) reqts
-    (let [{prodid :prodid} (first prods)]
-      (recur 
-        scores 
-        (rest prods)
-        (rels/append reqts #(score-cols (rels/select-single scores nil :prodid prodid :reqtid (:reqtid %))))))))
+  (-> 
+    ; TODO: need to figure out what's wrong with hash join - not commutative
+    (rels/nested-loop-join scores prods [:prodid :prodid = ])
+    (rels/nested-loop-join reqts [:reqtid :reqtid =])
+    (rels/denormalize :scores :prodid :proddesc :score)))
 
 (defn build-wave-relation
   [{:keys [scores products requirements]}]
@@ -140,6 +46,7 @@
     (sort-by #(vector (:category %) (:subcategory %) (:reqtdesc %)) ds)))
 
 
+; TODO: expand to support replacing repeating key values with some repeating substring
 (defn template-map
   "takes a template with delimited placeholders and fills the placeholders with the values in the map"
   [template m]
@@ -148,12 +55,9 @@
 (defn reqt-line
   "Converts a single requirement line into corresponding html"
   [reqt]
-  (let [score-keys (filter #(.startsWith (name %) "score") (keys reqt))]
-    (str (template-map REQT_HEADER reqt) 
-         (reduce str ""
-                 ; TODO: need raw versus computed score
-                 (map #(template-map REQT_PRODUCT_SCORE (assoc {} :score (get reqt %) :raw (get reqt %))) score-keys))
-         (template-map REQT_TERMINATOR reqt))))
+  (str (template-map REQT_HEADER reqt) 
+       (reduce str "" (map #(template-map REQT_PRODUCT_SCORE %) (:scores reqt)))
+       (template-map REQT_TERMINATOR reqt)))
 
 (defn gen-html
   "returns a string containing the HTML representation of the wave"
