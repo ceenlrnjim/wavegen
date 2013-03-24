@@ -24,8 +24,8 @@
 (def SUBCATEGORY_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
 (def SUBCATEGORY_TERMINATOR "</tr>\n")
 
-(def REQT_HEADER "<tr class='requirement'><td class='linenum'>~LINE~</td><td/><td/><td>~DESC~</td><td class='criteria'>~CRITERIA~</td><td>~WEIGHT~</td><td/><td/>")
-(def REQT_PRODUCT_SCORE "<td>~RAW~</td><td/><td>~SCORE~</td>")
+(def REQT_HEADER "<tr class='requirement'><td class='linenum'>~LINE~</td><td/><td/><td>~:reqtdesc~</td><td class='criteria'>~:scores~</td><td>~:abs-weight~</td><td/><td/>")
+(def REQT_PRODUCT_SCORE "<td>~:raw~</td><td/><td>~:score~</td>")
 (def REQT_TERMINATOR "</tr>\n")
 
 (def TOTAL_HEADER "<tr class='total'><td/><td/><td/><td/><td colspan='4'>Final Score:</td>")
@@ -123,36 +123,43 @@
 
 (defn score-cols
   [{:keys [prodid score reqtid]}]
-  (println prodid score reqtid)
-  {})
-    ;{ (keyword (str "score" prodid)) score })
+    { (keyword (str "score" (name prodid))) score })
 
 (defn denormalize-scores
   [scores prods reqts]
   (if (empty? prods) reqts
     (let [{prodid :prodid} (first prods)]
-      (println "denormalizing product " prodid)
       (recur 
         scores 
         (rest prods)
-        ; TODO: select here isn't working properly - returning no value
-        (rels/append reqts #(score-cols (rels/select-single scores {} :prodid prodid :reqtid {:reqtid %})))))))
+        (rels/append reqts #(score-cols (rels/select-single scores nil :prodid prodid :reqtid (:reqtid %))))))))
 
 (defn build-wave-relation
   [{:keys [scores products requirements]}]
-  ; join requirements, products, and scores
-  ; de-normalize products and requirements
-  ; cat subcat reqt criteria [rw scw cw]*
-  (println scores)
   (let [ds (denormalize-scores scores products requirements)]
-    ds))
+    (sort-by #(vector (:category %) (:subcategory %) (:reqtdesc %)) ds)))
 
 
+(defn template-map
+  "takes a template with delimited placeholders and fills the placeholders with the values in the map"
+  [template m]
+  (reduce #(.replace % (str "~" %2 "~") (str (get m %2))) template (keys m)))
+
+(defn reqt-line
+  "Converts a single requirement line into corresponding html"
+  [reqt]
+  (let [score-keys (filter #(.startsWith (name %) "score") (keys reqt))]
+    (str (template-map REQT_HEADER reqt) 
+         (reduce str ""
+                 ; TODO: need raw versus computed score
+                 (map #(template-map REQT_PRODUCT_SCORE (assoc {} :score (get reqt %) :raw (get reqt %))) score-keys))
+         (template-map REQT_TERMINATOR reqt))))
 
 (defn gen-html
   "returns a string containing the HTML representation of the wave"
   [wave]
-  (doseq [i (build-wave-relation wave)] (println i))
-
-  nil)
+  (apply str (map reqt-line (build-wave-relation wave))))
+  ;(doseq [{:keys [category subcategory reqtdesc]} (build-wave-relation wave)] 
+    ;(println category " -> " subcategory " -> " reqtdesc))
+  ;nil)
 
