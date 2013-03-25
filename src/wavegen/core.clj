@@ -1,6 +1,5 @@
 (ns wavegen.core
-  (:require [rels])
-  (:require [clojure.tools.logging :as log]))
+  (:require [rels]))
 
 (def ootb {2 "Out of the box feature" 1 "Possible with limited effort" 0 "Not possible or requires significant effort"})
 (def yesno {2 "Yes" 0 "No"})
@@ -19,7 +18,7 @@
 (defn reqt 
   "Adds a requirement to the wave currently in context.  Must be executed in a with-wave block"
   [wave id description abs-weight score-map cat subcat]
-  (assoc wave :requirements (conj (:requirements wave) {:reqtid id :reqtdesc description :wt abs-weight :scores score-map :category cat :subcategory subcat})))
+  (assoc wave :requirements (conj (:requirements wave) {:reqtid id :reqtdesc description :wt abs-weight :score-key score-map :category cat :subcategory subcat})))
 
 (defn product 
   "Adds a product to the wave"
