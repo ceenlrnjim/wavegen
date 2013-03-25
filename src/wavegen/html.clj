@@ -52,13 +52,20 @@
     (rels/denormalize :scores :prodid :proddesc :score)
     (rels/append (fn [_] {:type :requirement}))))
 
+(defn category-scores
+  [category w]
+  [])
+  ;TODO
+  ;(-> (rels/select w #(= (:category %) category))
+  ;    (rels/cols-seq :scores))
+
 (defn conj-category-rows
   [waverel]
   (let [cats (into #{} (rels/col-seq waverel :category))
         subcats (into #{} (rels/project waverel [:category :subcategory]))]
     (concat waverel
       ; TODO: need to roll up scores for each level here as well
-      (map #(assoc {} :type :category :category % :subcategory "" :reqtdesc "") cats)
+      (map #(assoc {} :type :category :category % :subcategory "" :reqtdesc "" :scores (category-scores % waverel) cats)
       (map (fn [{c :category s :subcategory}] (assoc {} :type :subcategory :category c :subcategory s :reqtdesc "")) subcats))))
                     
 
