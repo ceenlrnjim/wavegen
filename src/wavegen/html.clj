@@ -1,6 +1,6 @@
 (ns wavegen.html
-  (:use [wavegen.core])
-  (:use [wavegen.aggr]))
+  (:use [wavegen.core]))
+  ;(:use [wavegen.aggr]))
 
 (def formatter (java.text.DecimalFormat. "#0.0#"))
 (defn decfmt 
@@ -44,6 +44,10 @@
 (def SUBCATEGORY_PRODUCT_SCORE ["<td/><td/><td>" :subcategory-score "</td>"])
 (def SUBCATEGORY_TERMINATOR ["</tr>\n"])
 
+(def CATEGORY_HEADER ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :category-weight "</td>"])
+(def CATEGORY_PRODUCT_SCORE ["<td/><td/><td>" :score "</td>"])
+(def CATEGORY_TERMINATOR ["</tr>\n"])
+
 (defn denormalize-scores
   [scores prods reqts]
   (-> 
@@ -52,10 +56,25 @@
     (rels/denormalize :scores :prodid :proddesc :score)
     (rels/append (fn [_] {:type :requirement}))))
 
+(defn aggregate-scores
+  [pred w]
+  (-> (rels/select w pred)
+      ((comp flatten rels/col-seq) :scores)
+      ; the contents of scores is a sequence of maps, which is itself a relation
+      (rels/project [:prodid :score])
+      ; gather the values for one product
+      (#(group-by %2 %1) :prodid)
+      ; sum all the values for the product so we end up with a map with :prodid and :score (with a single value)
+      ; TODO: need to sum the weighted scores
+      (#(into {} (map %2 %1)) (fn [[k v]] [k (reduce #(+ (:score %2) %1) 0 v)]))))
+
+(defn subcategory-scores
+  [c s w]
+  (aggregate-scores #(and (= (:category %) c) (= (:subcategory %) s)) w))
+
 (defn category-scores
   [category w]
-  (-> (rels/select w #(= (:category %) category))
-      (rels/cols-seq :scores))
+  (aggregate-scores #(= (:category %) category) w))
 
 (defn conj-category-rows
   [waverel]
@@ -74,7 +93,8 @@
                     :type :subcategory 
                     :category c 
                     :subcategory s 
-                    :reqtdesc "")) 
+                    :reqtdesc ""
+                    :scores (subcategory-scores c s waverel))) 
            subcats))))
                     
 (defn build-wave-relation
@@ -99,9 +119,9 @@
 
 (defmulti render :type)
 (defmethod render :category [c]
-  )
+  (str (parent-child-template-map CATEGORY_HEADER CATEGORY_PRODUCT_SCORE :scores c) (template-map CATEGORY_TERMINATOR c)))
 (defmethod render :subcategory [s]
-  )
+  (str (parent-child-template-map SUBCATEGORY_HEADER SUBCATEGORY_PRODUCT_SCORE :scores s) (template-map SUBCATEGORY_TERMINATOR s)))
 (defmethod render :requirement [reqt]
   (str (parent-child-template-map REQT_HEADER REQT_PRODUCT_SCORE :scores reqt) (template-map REQT_TERMINATOR reqt)))
 
@@ -110,7 +130,7 @@
   [wave]
   (apply str 
     ; TODO: header
-    (map render (build-wave-relation wvae))))
+    (map render (build-wave-relation wave))))
     ; TODO: footer
 
     ;(flatten [
