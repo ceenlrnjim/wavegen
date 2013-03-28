@@ -12,12 +12,6 @@
   [template m]
   (apply str (map #(if (keyword? %) (get m %) %) template)))
 
-(defn parent-child-template-map
-  "parent template, child template, child key (in parent), map"
-  [pt ct ck m]
-  (let [parent (template-map pt m)
-        children (map #(template-map ct %) (get m ck))] ; note this assumes the value is a seq of maps
-    (apply str parent children)))
 
 ; TODO: move HTML snippets to resource file and use reader to load separate from code
 ;(def HEADER_LINE_1_HEADER "<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>")
@@ -48,17 +42,19 @@
 (def HEADER_PRODUCT_NAME ["<td colspan='3'>" :proddesc "</td>"])
 (def HEADER_LINE_1_TERMINATOR ["</tr>\n"])
 
-(def REQT_HEADER ["<tr class='requirement'><td class='linenum'>" :linenum "</td><td/><td/><td>" :reqtdesc "</td><td class='criteria'>" :score-key "</td><td>" :abs-weight "</td><td/><td/>"])
-(def REQT_PRODUCT_SCORE ["<td>" :score "</td><td/><td>" :rel-score "</td>"])
-(def REQT_TERMINATOR ["</tr>\n"])
-
-(def SUBCATEGORY_HEADER ["<tr class='subcategory'><td class='linenum'>" :linenum "</td><td/><td colspan='3' class='subcategory-name'>" :subcategory "</td><td/><td class='subcategory-weight'>" :subcategory-weight "</td><td/>"])
-(def SUBCATEGORY_PRODUCT_SCORE ["<td/><td/><td>" :score "</td>"])
-(def SUBCATEGORY_TERMINATOR ["</tr>\n"])
-
-(def CATEGORY_HEADER ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :category-weight "</td>"])
-(def CATEGORY_PRODUCT_SCORE ["<td/><td/><td>" :score "</td>"])
-(def CATEGORY_TERMINATOR ["</tr>\n"])
+(def templates
+  {:requirement
+    {:header ["<tr class='requirement'><td class='linenum'>" :linenum "</td><td/><td/><td>" :reqtdesc "</td><td class='criteria'>" :score-key "</td><td>" :abs-weight "</td><td/><td/>"]
+     :product ["<td>" :score "</td><td/><td>" :rel-score "</td>"]
+     :terminator ["</tr>\n"]}
+   :subcategory
+    {:header ["<tr class='subcategory'><td class='linenum'>" :linenum "</td><td/><td colspan='3' class='subcategory-name'>" :subcategory "</td><td/><td class='subcategory-weight'>" :subcategory-weight "</td><td/>"]
+     :product ["<td/><td/><td>" :score "</td>"]
+     :terminator ["</tr>\n"]}
+   :category
+    {:header ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :category-weight "</td>"]
+     :product ["<td/><td/><td>" :score "</td>"]
+     :terminator ["</tr>\n"]}})
 
 (defn weighted-scores
   "Joins the scores, products, and requirements data, adding the :rel-wt (relative weight)
@@ -131,14 +127,13 @@
                (conj-category-rows))]
     (sort-by #(vector (:category %) (:subcategory %) (:reqtdesc %)) ds)))
 
-
-(defmulti render :type)
-(defmethod render :category [c]
-  (str (parent-child-template-map CATEGORY_HEADER CATEGORY_PRODUCT_SCORE :scores c) (template-map CATEGORY_TERMINATOR c)))
-(defmethod render :subcategory [s]
-  (str (parent-child-template-map SUBCATEGORY_HEADER SUBCATEGORY_PRODUCT_SCORE :scores s) (template-map SUBCATEGORY_TERMINATOR s)))
-(defmethod render :requirement [reqt]
-  (str (parent-child-template-map REQT_HEADER REQT_PRODUCT_SCORE :scores reqt) (template-map REQT_TERMINATOR reqt)))
+(defn render
+  [row]
+  (let [{:keys [header product terminator]} (get templates (:type row))
+        h (template-map header row)
+        ps (map #(template-map product %) (get row :scores))
+        t (template-map terminator row)]
+    (apply str (flatten [h ps t]))))
 
 (defn gen-html
   "returns a string containing the HTML representation of the wave"
