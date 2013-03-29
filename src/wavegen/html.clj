@@ -10,37 +10,13 @@
 (defn template-map
   "takes a template with delimited placeholders and fills the placeholders with the values in the map"
   [template m]
-  (apply str (map #(if (keyword? %) (get m %) %) template)))
-
-
-; TODO: move HTML snippets to resource file and use reader to load separate from code
-;(def HEADER_LINE_1_HEADER "<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>")
-;(def HEADER_PRODUCT_NAME "<td colspan='3'>~NAME~</td>")
-;(def HEADER_LINE_1_TERMINATOR "</tr>\n")
-;
-;(def HEADER_LINE_2_HEADER "<tr class='header'><td class='linenumlabel'></td><td class='categorylabel'>Category</td><td class='subcategorylabel'>Sub-category</td><td class='reqtlabel'>Requirement</td><td class='criterialabel'>Evaluation Criteria</td><td class='reqtwtlabel'>Reqt</td><td class='subcatwtlabel'>Sub-cat</td><td class='catwtlabel'>Category</td>")
-;(def HEADER_LINE_2_PRODUCT_HEADER "<td class='scorelabel'>Score</td><td class='noteslabel'>Notes</td><td class='wtscorelabel'>Wgt Score</td>")
-;(def HEADER_LINE_2_TERMINATOR "</tr>\n")
-;
-;(def CATEGORY_HEADER "<tr class='category'><td class='linenum'>~LINE~</td><td colspan='4' class='category-name'>~NAME~</td><td/><td/><td class='category-weight'>~WEIGHT~</td>")
-;(def CATEGORY_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
-;(def CATEGORY_TERMINATOR "</tr>\n")
-;
-;(def SUBCATEGORY_HEADER "<tr class='subcategory'><td class='linenum'>~LINE~</td><td/><td colspan='3' class='subcategory-name'>~NAME~</td><td/><td class='subcategory-weight'>~WEIGHT~</td><td/>")
-;(def SUBCATEGORY_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
-;(def SUBCATEGORY_TERMINATOR "</tr>\n")
-
-;(def REQT_HEADER "<tr class='requirement'><td class='linenum'>~LINE~</td><td/><td/><td>~:reqtdesc~</td><td class='criteria'>~:scores~</td><td>~:abs-weight~</td><td/><td/>")
-;(def REQT_PRODUCT_SCORE "<td>~:raw~</td><td/><td>~:score~</td>")
-;(def REQT_TERMINATOR "</tr>\n")
-;
-;(def TOTAL_HEADER "<tr class='total'><td/><td/><td/><td/><td colspan='4'>Final Score:</td>")
-;(def TOTAL_PRODUCT_SCORE "<td/><td/><td>~SCORE~</td>")
-;(def TOTAL_TERMINATOR "</tr>\n")
-
-(def HEADER_LINE_1_HEADER ["<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>"])
-(def HEADER_PRODUCT_NAME ["<td colspan='3'>" :proddesc "</td>"])
-(def HEADER_LINE_1_TERMINATOR ["</tr>\n"])
+  (apply str 
+         (map 
+           (fn [t]
+             (cond (and (keyword? t) (number? (get m t))) (decfmt (get m t))
+                   (keyword? t) (get m t)
+                   :else t))
+           template)))
 
 (def templates
   {:requirement
@@ -54,26 +30,19 @@
    :category
     {:header ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :category-weight "</td>"]
      :product ["<td/><td/><td>" :score "</td>"]
+     :terminator ["</tr>\n"]}
+   :totals
+    {:header ["<tr class='total'><td/><td/><td/><td/><td colspan='4'>Final Score:</td>"]
+     :producct ["<td/><td/><td>" :score "</td>"]
+     :terminator ["</tr>\n"]}
+   :header
+    {:header ["<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>"]
+     :product ["<td colspan='3'>" :proddesc "</td>"]
+     :terminator ["</tr>\n"]}
+   :subheader
+    {:header ["<tr class='header'><td class='linenumlabel'></td><td class='categorylabel'>Category</td><td class='subcategorylabel'>Sub-category</td><td class='reqtlabel'>Requirement</td><td class='criterialabel'>Evaluation Criteria</td><td class='reqtwtlabel'>Reqt</td><td class='subcatwtlabel'>Sub-cat</td><td class='catwtlabel'>Category</td>"]
+     :product ["<td class='scorelabel'>Score</td><td class='noteslabel'>Notes</td><td class='wtscorelabel'>Wgt Score</td>"]
      :terminator ["</tr>\n"]}})
-
-(defn weighted-scores
-  "Joins the scores, products, and requirements data, adding the :rel-wt (relative weight)
-   and :rel-score (relative score) values for each requirement and score respectively"
-  [scores prods reqts]
-  (let [total-weight (reduce + 0 (rels/col-seq reqts :wt))]
-    (-> 
-      (rels/append reqts (fn [r] {:rel-wt (/ (:wt r) total-weight)}))
-      (rels/join scores [= :reqtid :reqtid])
-      (rels/append (fn [rs] {:rel-score (* (:rel-wt rs) (:score rs))}))
-      (rels/join prods [= :prodid :prodid]))))
-
-(defn denormalize-scores
-  "consolidates the relation so that there is one row per requirement,
-   all scores for that requirement are aggregated into the :scores attribute"
-  [r]
-  (-> 
-    (rels/denormalize r :scores :prodid :proddesc :score :rel-score)
-    (rels/append (fn [_] {:type :requirement}))))
 
 (defn aggregate-scores
   "computes a list of the aggregated scores for each product in the relation w where (pred %) is true"
@@ -82,10 +51,8 @@
       ((comp flatten rels/col-seq) :scores)
       ; the contents of scores is a sequence of maps, which is itself a relation
       (rels/project [:prodid :rel-score])
-      ; gather the values for one product
       (#(group-by %2 %1) :prodid)
-      ; sum all the values for the product so we end up with a map with :prodid and :score (with a single value)
-      ; TODO: need to make sure products are in the same order as elsewhere
+      ; aggregate the score for each product TODO: need to make sure products are in the same order as elsewhere
       (#(map %2 %1) (fn [[k v]] {:score (reduce #(+ (:rel-score %2) %1) 0 v)}))))
 
 (defn subcategory-scores
@@ -102,30 +69,44 @@
   (let [cats (into #{} (rels/col-seq waverel :category))
         subcats (into #{} (rels/project waverel [:category :subcategory]))]
     (concat waverel
-      ; TODO: need to roll up scores for each level here as well
-      (map #(assoc {} :type :category 
-                      :category % 
-                      :subcategory "" 
-                      :reqtdesc "" 
-                      :scores (category-scores % waverel)) 
+      (map (fn [c] {:type :category 
+                    :category c 
+                    :scores (category-scores c waverel)}) 
            cats)
       (map (fn [{c :category s :subcategory}] 
-             (assoc {} 
-                    :type :subcategory 
-                    :category c 
-                    :subcategory s 
-                    :reqtdesc ""
-                    :scores (subcategory-scores c s waverel))) 
+             {:type :subcategory 
+              :category c 
+              :subcategory s 
+              :scores (subcategory-scores c s waverel)})
            subcats))))
-                    
+
+(defn conj-totals
+  [w]
+  (concat 
+    w 
+    [{:type :totals :scores (aggregate-scores #(= (:type %) :requirement) w)}]))
+
+(defn cons-headers
+  [w products]
+  (concat
+    [{:type :header :scores products} ; using scores to fit in render function
+     {:type :subheader}]
+    w))
+    
 (defn build-wave-relation
   "Combines the data in the specified wave, computes score values, and returns a consolidated relation
    for rendering the wave report"
   [{:keys [scores products requirements]}]
-  (let [ds (-> (weighted-scores scores products requirements)
-               (denormalize-scores)
-               (conj-category-rows))]
-    (sort-by #(vector (:category %) (:subcategory %) (:reqtdesc %)) ds)))
+  (let [total-weight (reduce + 0 (rels/col-seq requirements :wt))]
+     (-> (rels/append requirements (fn [r] {:rel-wt (/ (:wt r) total-weight) :type :requirement })) ; compute relative weight, mark row as a requirement
+         (rels/join scores [= :reqtid :reqtid])                                                     ; join to scores
+         (rels/append (fn [rs] {:rel-score (* (:rel-wt rs) (:score rs))}))                          ; compute relative score
+         (rels/join products [= :prodid :prodid])                                                   ; join to products
+         (rels/denormalize :scores :prodid :proddesc :score :rel-score)                             ; denormailize to one row per requirement
+         (conj-category-rows)                                                                       ; add rows for categories and subcategories
+         (#(sort-by %2 %1) #(vector (:category %) (:subcategory %) (:reqtdesc %)))                  ; sort the rows into the right order
+         (conj-totals)                                                                              ; add row for totals at the end
+         (cons-headers products))))                                                                 ; add rows at the beginning with the headers 
 
 (defn render
   [row]
@@ -139,7 +120,7 @@
   "returns a string containing the HTML representation of the wave"
   [wave]
   (apply str 
-    ; TODO: header
-    (map render (build-wave-relation wave))))
-    ; TODO: footer
+    (flatten ["<html><head><link rel='stylesheet' href='wave.css'></head><body><table><tbody>"
+              (map render (build-wave-relation wave))
+              "</tbody></table></body></html>"])))
 
