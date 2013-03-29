@@ -42,7 +42,9 @@
    :subheader
     {:header ["<tr class='header'><td class='linenumlabel'></td><td class='categorylabel'>Category</td><td class='subcategorylabel'>Sub-category</td><td class='reqtlabel'>Requirement</td><td class='criterialabel'>Evaluation Criteria</td><td class='reqtwtlabel'>Reqt</td><td class='subcatwtlabel'>Sub-cat</td><td class='catwtlabel'>Category</td>"]
      :product ["<td class='scorelabel'>Score</td><td class='noteslabel'>Notes</td><td class='wtscorelabel'>Wgt Score</td>"]
-     :terminator ["</tr>\n"]}})
+     :terminator ["</tr>\n"]}
+   :pagehead "<html><head><link rel='stylesheet' href='wave.css'></head><body><table><tbody>"
+   :pagefooter "</tbody></table></body></html>"})
 
 (defn aggregate-scores
   "computes a list of the aggregated scores for each product in the relation w where (pred %) is true"
@@ -120,7 +122,7 @@
   "returns a string containing the HTML representation of the wave"
   [wave]
   (apply str 
-    (flatten ["<html><head><link rel='stylesheet' href='wave.css'></head><body><table><tbody>"
+    (flatten [(:pagehead templates)
               (map render (build-wave-relation wave))
-              "</tbody></table></body></html>"])))
+              (:pagefooter templates)])))
 
