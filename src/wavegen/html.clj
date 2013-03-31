@@ -20,15 +20,15 @@
 
 (def templates
   {:requirement
-    {:header ["<tr class='requirement'><td class='linenum'>" :linenum "</td><td/><td/><td>" :reqtdesc "</td><td class='criteria'>" :score-key "</td><td>" :abs-weight "</td><td/><td/>"]
+    {:header ["<tr class='requirement'><td class='linenum'>" :linenum "</td><td/><td/><td>" :reqtdesc "</td><td class='criteria'>" :score-key "</td><td>" :rel-wt "</td><td/><td/>"]
      :product ["<td>" :score "</td><td/><td>" :rel-score "</td>"]
      :terminator ["</tr>\n"]}
    :subcategory
-    {:header ["<tr class='subcategory'><td class='linenum'>" :linenum "</td><td/><td colspan='3' class='subcategory-name'>" :subcategory "</td><td/><td class='subcategory-weight'>" :subcategory-weight "</td><td/>"]
+    {:header ["<tr class='subcategory'><td class='linenum'>" :linenum "</td><td/><td colspan='3' class='subcategory-name'>" :subcategory "</td><td/><td class='subcategory-weight'>" :rel-wt "</td><td/>"]
      :product ["<td/><td/><td>" :score "</td>"]
      :terminator ["</tr>\n"]}
    :category
-    {:header ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :category-weight "</td>"]
+    {:header ["<tr class='category'><td class='linenum'>" :linenum "</td><td colspan='4' class='category-name'>" :category "</td><td/><td/><td class='category-weight'>" :rel-wt "</td>"]
      :product ["<td/><td/><td>" :score "</td>"]
      :terminator ["</tr>\n"]}
    :totals
@@ -46,7 +46,7 @@
    :pagehead "<html><head><link rel='stylesheet' href='wave.css'></head><body><table><tbody>"
    :pagefooter "</tbody></table></body></html>"})
 
-(defn aggregate-scores
+(defn aggr-scores
   "computes a list of the aggregated scores for each product in the relation w where (pred %) is true"
   [pred w]
   (-> (rels/select w pred)
@@ -57,13 +57,17 @@
       ; aggregate the score for each product TODO: need to make sure products are in the same order as elsewhere
       (#(map %2 %1) (fn [[k v]] {:score (reduce #(+ (:rel-score %2) %1) 0 v)}))))
 
-(defn subcategory-scores
-  [c s w]
-  (aggregate-scores #(and (= (:category %) c) (= (:subcategory %) s)) w))
+(defn catpred [c]
+  (fn [t] (= (:category t) c)))
 
-(defn category-scores
-  [category w]
-  (aggregate-scores #(= (:category %) category) w))
+(defn subcatpred [c s]
+  (fn [t] (and ((catpred c) t) (= (:subcategory t) s))))
+
+(defn aggr-weight
+  [pred w]
+  (reduce + 0 (rels/col-seq
+                (rels/select w pred)
+                :rel-wt)))
 
 (defn conj-category-rows
   "Adds a row to the relation for each of the categories and subcategories associated with the requirements"
@@ -73,20 +77,21 @@
     (concat waverel
       (map (fn [c] {:type :category 
                     :category c 
-                    :scores (category-scores c waverel)}) 
+                    :rel-wt (aggr-weight (catpred c) waverel) 
+                    :scores (aggr-scores (catpred c) waverel)}) 
            cats)
       (map (fn [{c :category s :subcategory}] 
              {:type :subcategory 
               :category c 
               :subcategory s 
-              :scores (subcategory-scores c s waverel)})
+              :rel-wt (aggr-weight (subcatpred c s) waverel)
+              :scores (aggr-scores (subcatpred c s) waverel)})
            subcats))))
 
 (defn conj-totals
   [w]
-  (concat 
-    w 
-    [{:type :totals :scores (aggregate-scores #(= (:type %) :requirement) w)}]))
+  (concat w 
+    [{:type :totals :scores (aggr-scores #(= (:type %) :requirement) w)}]))
 
 (defn cons-headers
   [w products]
