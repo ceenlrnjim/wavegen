@@ -1,6 +1,5 @@
 (ns wavegen.html
   (:use [wavegen.core]))
-  ;(:use [wavegen.aggr]))
 
 (def formatter (java.text.DecimalFormat. "#0.0#"))
 (defn decfmt 
@@ -8,7 +7,7 @@
   [d] (.format formatter d))
 
 (defn template-map
-  "takes a template with delimited placeholders and fills the placeholders with the values in the map"
+  "template is a sequence of strings and keywords.  Keywords are replaced with associated values in map m"
   [template m]
   (apply str 
          (map 
@@ -58,12 +57,15 @@
       (#(map %2 %1) (fn [[k v]] {:score (reduce #(+ (:rel-score %2) %1) 0 v)}))))
 
 (defn catpred [c]
+  "Returns a predicate function that will return true for category rows of the specified name"
   (fn [t] (= (:category t) c)))
 
 (defn subcatpred [c s]
+  "Returns a predicate function that will return true for subcategory rows of the specified name in the specified category"
   (fn [t] (and ((catpred c) t) (= (:subcategory t) s))))
 
 (defn aggr-weight
+  "Returns the aggregated weight of rows that match the specified predicate"
   [pred w]
   (reduce + 0 (rels/col-seq
                 (rels/select w pred)
@@ -89,11 +91,13 @@
            subcats))))
 
 (defn conj-totals
+  "Adds a total row to the specified wave relation"
   [w]
   (concat w 
     [{:type :totals :scores (aggr-scores #(= (:type %) :requirement) w)}]))
 
 (defn cons-headers
+  "Adds header rows to the specified wave relation"
   [w products]
   (concat
     [{:type :header :scores products} ; using scores to fit in render function
@@ -130,4 +134,3 @@
     (flatten [(:pagehead templates)
               (map render (build-wave-relation wave))
               (:pagefooter templates)])))
-
