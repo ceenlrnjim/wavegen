@@ -33,7 +33,7 @@
      :terminator ["</tr>\n"]}
    :totals
     {:header ["<tr class='total'><td/><td/><td/><td/><td colspan='4'>Final Score:</td>"]
-     :producct ["<td/><td/><td>" :score "</td>"]
+     :product ["<td/><td/><td>" :score "</td>"]
      :terminator ["</tr>\n"]}
    :header
     {:header ["<tr class='header'><td colspan='5'></td><td colspan='3'>Weightings</td>"]
