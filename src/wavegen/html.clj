@@ -97,7 +97,7 @@
   [w products]
   (concat
     [{:type :header :scores products} ; using scores to fit in render function
-     {:type :subheader}]
+     {:type :subheader :scores products}]
     w))
     
 (defn build-wave-relation
