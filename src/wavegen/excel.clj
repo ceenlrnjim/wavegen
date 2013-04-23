@@ -1,283 +1,85 @@
 (ns wavegen.excel
-  (:import [org.apache.poi.ss.usermodel Workbook CellStyle Font])
-  (:import [org.apache.poi.hssf.usermodel HSSFWorkbook HSSFFont])
-  (:import [org.apache.poi.hssf.util HSSFColor HSSFColor$WHITE HSSFColor$DARK_BLUE HSSFColor$BLUE HSSFColor$LIGHT_BLUE])
-  (:import [org.apache.poi.ss.util CellRangeAddress])
-  (:use [wavegen.core])
-  (:use [wavegen.aggr]))
+  (:require [rels]))
 
-(def ^:dynamic *row-counter* (atom -1))
+(defn conj-category-rows
+  "Adds a row to the relation for each of the categories and subcategories associated with the requirements"
+  [waverel]
+  (let [cats (into #{} (rels/col-seq waverel :category))
+        subcats (into #{} (rels/project waverel [:category :subcategory]))]
+    (concat waverel
+      (map (fn [c] {:type :category :category c }) cats)
+      (map (fn [{c :category s :subcategory}] 
+             {:type :subcategory :category c :subcategory s })
+           subcats))))
 
-(defn- nextrowid
-  "Returns next row id as an int"
-  []
-  (int (swap! *row-counter* inc)))
+(defn cons-headers
+  "Adds header rows to the specified wave relation"
+  [w products]
+  (concat
+    [{:type :header :scores products} ; using scores to fit in render function
+     {:type :subheader :scores products}]
+    w))
 
-;
-; Styling functions -------------------------------------------------------------------------
-;
-(def cellstyles (atom {}))
+(defn build-wave-relation
+  "Combines the data in the specified wave, computes score values, and returns a consolidated relation
+   for rendering the wave report"
+  [{:keys [products requirements]}]
+     (-> (rels/append requirements (fn [_] {:type :requirement}))
+         (rels/join products) ; cartesian - no scores
+         (rels/denormalize :scores :prodid :proddesc)                                               ; denormailize to one row per requirement
+         (conj-category-rows)                                                                       ; add rows for categories and subcategories
+         (#(sort-by %2 %1) #(vector (:category %) (:subcategory %) (:reqtdesc %)))                  ; sort the rows into the right order
+         ;(conj-totals)                                                                              ; add row for totals at the end
+         (cons-headers products)
+         ))                                                                  ; add rows at the beginning with the headers 
 
-; TODO: add style details
-(defn- header-style
-  [wb font]
-  (doto (.createCellStyle wb)
-    (.setFillForegroundColor HSSFColor$DARK_BLUE/index)
-    ;(.setFillBackgroundColor HSSFColor$DARK_BLUE/index)
-    (.setFillPattern CellStyle/SOLID_FOREGROUND)
-    (.setFont font)
-    (.setAlignment CellStyle/ALIGN_CENTER)))
+(defn merge-cols
+  [row start end]
+  (.addMergedRegion 
+    (.getSheet row)
+    (org.apache.poi.ss.util.CellRangeAddress.  (.getRowNum row) (.getRowNum row) start end)))
 
-(defn- reqt-style
-  [wb]
-  (doto (.createCellStyle wb)
-    (.setWrapText true)
-    (.setAlignment CellStyle/ALIGN_LEFT)))
-
-(defn- subcat-style
-  [wb font]
-  (doto (.createCellStyle wb)
-    (.setFillForegroundColor HSSFColor$LIGHT_BLUE/index)
-    (.setFillBackgroundColor HSSFColor$DARK_BLUE/index)
-    (.setFillPattern CellStyle/SOLID_FOREGROUND)
-    (.setFont font)
-    (.setAlignment CellStyle/ALIGN_LEFT)))
-
-(defn- cat-style
-  [wb font]
-  (doto (.createCellStyle wb)
-    (.setFillForegroundColor HSSFColor$BLUE/index)
-    (.setFillBackgroundColor HSSFColor$DARK_BLUE/index)
-    (.setFillPattern CellStyle/SOLID_FOREGROUND)
-    (.setFont font)
-    (.setAlignment CellStyle/ALIGN_LEFT)))
-
-(defn- total-style
-  [wb font]
-  (doto (.createCellStyle wb)
-    (.setFont font)
-    (.setBorderTop CellStyle/BORDER_THICK)
-    (.setAlignment CellStyle/ALIGN_LEFT)))
-
-(defn- init-styles
-  [wb]
-  (let [headerfont (.createFont wb)
-        totalfont (.createFont wb)]
-    (doto headerfont
-      (.setColor HSSFColor$WHITE/index))
-    (doto totalfont
-      (.setFontHeightInPoints 14)
-      (.setBoldweight Font/BOLDWEIGHT_BOLD))
-    (swap! cellstyles assoc :header (header-style wb headerfont))
-    (swap! cellstyles assoc :subcategory (subcat-style wb headerfont))
-    (swap! cellstyles assoc :category (cat-style wb headerfont))
-    (swap! cellstyles assoc :totals (total-style wb totalfont))
-    (swap! cellstyles assoc :requirement (reqt-style wb))))
+; TODO: support for styling (Center, colors, etc)
+(defn cells
+  [row ix & specs]
+  (if (empty? specs) nil
+    (let [[v n] (first specs)
+          c (.createCell row ix)]
+      (.setCellValue c v)
+      (when n (merge-cols row ix (+ ix (- n 1))))
+      (apply cells row (if n (+ ix n) (inc ix)) (rest specs)))))
 
 
-;
-; Utility functions -------------------------------------------------------------------------
-;
+(defmulti add-cells (fn [ctx data] (:type data)))
+(defmethod add-cells :requirement [ctx data]
+  (cells (:row ctx) 3
+    [(:reqtdesc data)]
+    [(str (:score-key data)) 3]))
 
-(defn- addcell
-  ([row cellix value stylekey valfunc]
-    (let [cell (.createCell row cellix)]
-      ;(println "Setting cell value " value " of type " (.getClass value))
-      (valfunc cell value)
-      (.setCellStyle cell (get @cellstyles stylekey))
-      cell))
-  ; Adds a row that spans the specified cell indices
-  ([row cellstartix cellendix value stylekey valfunc]
-    (let [cell (addcell row cellstartix value stylekey valfunc)]
-      (.addMergedRegion (.getSheet row) (CellRangeAddress. (.getRowNum row) (.getRowNum row) cellstartix cellendix))
-      cell)))
+(defmethod add-cells :header [ctx data]
+  (let [ps (map #(vector (:proddesc %) 3) (:scores data))]
+    (apply cells (:row ctx) 5 (cons ["Weighting" 3] ps))))
+    
 
-(defn- add-value-cell
-  "Adds a cell with the specified value and style key to the specified sheet.
-  Style key is used as the key to the cellstyles map.  returns the cell"
-  ([row cellix value stylekey]
-    (addcell row cellix value stylekey #(.setCellValue %1 %2)))
-  ; Adds a row that spans the specified cell indices
-  ([row cellstartix cellendix value stylekey]
-    (addcell row cellstartix cellendix value stylekey #(.setCellValue %1 %2))))
+(defmethod add-cells :subheader [ctx data]
+  (let [ps (mapcat (fn [_] [["Score"]["Notes"]["Wgt Score"]]) (:scores data))]
+    (apply cells (:row ctx) 1 
+      (concat [["Category"] ["Sub-Category"] ["Requirement"] ["Eval Criteria"] ["Reqt"]["Sub-cat"]["Category"]] ps))))
 
-(defn- add-formula-cell
-  "Adds a cell with the specified value and style key to the specified sheet.
-  Style key is used as the key to the cellstyles map.  returns the cell"
-  ([row cellix formula stylekey]
-    (addcell row cellix formula stylekey #(.setCellFormula %1 %2)))
-  ; Adds a row that spans the specified cell indices
-  ([row cellstartix cellendix formula stylekey]
-    (addcell row cellstartix cellendix formula stylekey #(.setCellFormula %1 %2))))
+(defmethod add-cells :category [ctx data]
+)
+(defmethod add-cells :subcategory [ctx data]
+)
 
-(defn- add-value-cells
-  "Adds a range of values of a specified width onto the end of a row"
-  ([row startix values style]
-    (let [counter (atom -1)]
-      (doseq [v values]
-        (add-value-cell row (+ startix (swap! counter inc)) v style))))
-  ([row startix width values style]
-    (let [counter (atom (- startix width))]
-      (doseq [v values]
-        (let [ix1 (swap! counter + width)
-              ix2 (+ ix1 width -1)]
-          ;(println "Adding cell" v "from" ix1 "to" ix2)
-          (add-value-cell row ix1 ix2 v style))))))
-
-(defn- itemixseq
-  "Returns a sequence of tuples that contain item from specified seq at second location and index 
-  in the sequence as the first item"
-  [s]
-  (map-indexed #(vector %1 %2) s))
-
-(defn- range-formula
-  "Takes a zero indexed collection of rows numbers (cells for poi api) and returns a  string with a sum range formula (1 indexed for the sheet)"
-  [formula column-letter rows]
-  (str formula "($" column-letter (+ 1 (apply min rows)) ":$" column-letter (+ 1 (apply max rows)) ")"))
-
-(defn- list-formula
-  "Returns the formula over the specified list of 0-indexed row numbers"
-  [formula column-letter rows]
-  (str 
-    (reduce
-      #(str %1 "," %2)
-      (str formula "(")
-      (map #(str "$" column-letter (+ 1 %)) rows))
-    ")"))
-
-(def letter-lookup (reduce #(assoc %1 (first %2) (second %2)) {} (map-indexed #(vector %1 %2) "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))
-
-(defn- col-letter
-  "Returns the letter designation for the specified 0-indexed column number"
-  [i]
-  (get letter-lookup i))
-
-
-;
-; Generation functions -------------------------------------------------------------------------
-;
-
-
-(defn- header
-  "writes the header rows to the specified sheet for the specified wave"
-  [sheet wave]
-  (let [header1rowix (nextrowid)
-        header2rowix (nextrowid)
-        header1row (.createRow sheet header1rowix)
-        header2row (.createRow sheet header2rowix)]
-    (add-value-cell header1row 0 3 "" :header)
-    (add-value-cell header1row 4 6 "Weightings" :header)
-    (add-value-cells header1row 7 3 (map #(product-desc wave %) (prod-keys wave)) :header)
-    (add-value-cells header2row 0 ["Category" "Sub-category" "Requirement" "Evaluation Criteria" "Reqt" "Sub-cat" "Category"] :header)
-    (add-value-cells header2row 7 (flatten (repeat (count (prod-keys wave)) ["Score" "Notes" "Wgt Score"])) :header)))
-
-(defn- scores-str
-  "Returns a string representing the scores meaning map"
-  [m]
-  (reduce
-    #(str %1 "\n" (first %2) ":" (second %2))
-    ""
-    m))
-
-(defn- requirement
-  "adds row and cells for the specified requirement.
-  Returns the row number for this requirement."
-  [sheet wave cat subcat r]
-  (let [reqtrow (.createRow sheet (nextrowid))]
-    (add-value-cells reqtrow 0 [""  ; cat
-                         ""  ; subcat
-                         (:desc r) ; requirement
-                         (scores-str (:scores r)) ; score meaning
-                         (double (reqt-weight wave r)) ; requirement weight
-                         ""  ;sub-cat weight
-                         ""] ; cat-weight
-                         :requirement)
-    (doseq [pid (itemixseq (prod-keys wave))]
-      (let [scorecol (+ 7 (* 3 (first pid)))
-            adjustedrownum (+ 1 (.getRowNum reqtrow))]
-        (add-value-cells reqtrow scorecol
-                          [(double (get-score wave (second pid) (:id r))) ;raw score
-                         ""] ; notes
-                         :requirement)
-        (add-formula-cell reqtrow (+ 2 scorecol) (str "$e" adjustedrownum "*" (col-letter scorecol) adjustedrownum)  :requirement)))
-    (.getRowNum reqtrow)))
-
-
-(defn- subcategory
-  "Adds a row and cells for the specified subcategory over the specified row ids - returns the index for this row"
-  [subcat sheet subcatrowix wave reqt-row-nums]
-  (let [subcatrow (.createRow sheet subcatrowix)]
-    (add-value-cell subcatrow 0 "" :subcategory)
-    (add-value-cell subcatrow 1 3 subcat :subcategory)
-    (add-value-cell subcatrow 4 "" :subcategory)
-    (add-formula-cell subcatrow 5 (range-formula "sum" "e" reqt-row-nums) :subcategory)
-    (add-value-cell subcatrow 6 "" :subcategory)
-    (doseq [pid (itemixseq (prod-keys wave))]
-      (let [valcolix (+ 9 (* 3 (first pid)))]
-        (add-value-cells subcatrow (- valcolix 2) ["" ""] :subcategory)
-        (add-formula-cell subcatrow valcolix (range-formula "sum" (col-letter valcolix) reqt-row-nums) :subcategory)))
-    (.getRowNum subcatrow)))
-
-(defn- category
-  "Adds a row and cells for the specified category - returns the index for this row"
-  [cat sheet catrowix wave subcat-row-nums]
-  (let [catrow (.createRow sheet catrowix)]
-    (add-value-cell catrow 0 3 cat :category)
-    (add-value-cells catrow 4 ["" ""] :category)
-    (add-formula-cell catrow 6 (list-formula "sum" (col-letter 5) subcat-row-nums) :category)
-    (doseq [pid (itemixseq (prod-keys wave))]
-      (let [valcolix (+ 9 (* 3 (first pid)))]
-        (add-value-cells catrow (- valcolix 2) ["" ""] :category)
-        (add-formula-cell catrow valcolix (list-formula "sum" (col-letter valcolix) subcat-row-nums) :category)))
-    (.getRowNum catrow)))
-
-(defn- totals
-  "Adds a row and cells for the grand total line"
-  [sheet wave cat-row-nums]
-  (let [totalrow (.createRow sheet (nextrowid))]
-    (add-value-cell totalrow 6 "Totals" :totals)
-    (doseq [pid (itemixseq (prod-keys wave))]
-      (let [valcolix (+ 9 (* 3 (first pid)))]
-        (add-value-cells totalrow (- valcolix 2) ["" ""] :totals)
-        (add-formula-cell totalrow valcolix (list-formula "sum" (col-letter valcolix) cat-row-nums) :totals)))))
-
-
-
-; TODO: break up this nested mess of maps and reduces into set of legible functions
-(defn gen-excel
-  "Returns a Workbook that represents the wave format in excel form"
+(defn gen-xlsx
   [wave]
-  ; TODO: support both style workbooks HSSF and XSSF
-  (let [wb (HSSFWorkbook.)
-        sheet (.createSheet wb "Wave Analysis")]
-      (init-styles wb)
-      (doto sheet
-        (.setDisplayGridlines true)
-        (.setPrintGridlines true)
-        (.setFitToPage true)
-        (.setAutobreaks true))
-      (doto (.getPrintSetup sheet)
-        (.setLandscape true)
-        (.setFitHeight 1)
-        (.setFitWidth 1))
-      (header sheet wave)
-      (totals sheet wave 
-        (reduce #(conj %1 %2) [] ; build vector of row numbers for categories
-          (map ; convert from category name to line number (with cell/row addition side effects)
-            (fn [c]
-              (category c sheet (nextrowid) wave
-                (reduce #(conj %1 %2) [] ; build a vector of row numbers of subcategories
-                        (map ; convert from subcategory name to line number (with cell/row addition side effects)
-                          (fn [subcat] 
-                            (subcategory subcat sheet (nextrowid) wave
-                            (reduce #(conj %1 %2) [];  build a vector of row numbers to be used in cell formulas
-                                    (map  ;convert from requirements data structure to line numbers (with cell addition side effects)
-                                      #(requirement sheet wave c subcat %) 
-                                      (requirements wave c subcat)))))
-                          (subcategories wave c)))))
-            (categories wave))))
-    (.autoSizeColumn sheet 2)
-    (.autoSizeColumn sheet 3)
+  (let [wb (org.apache.poi.xssf.usermodel.XSSFWorkbook.)
+        sheet (.createSheet wb)
+        waverel (build-wave-relation wave)
+        rowcounter (atom 1)]
+    (doseq [data waverel]
+      (let [row (.createRow sheet @rowcounter)]
+          (add-cells {:book wb :sheet sheet :row row} data))
+      (swap! rowcounter + 1))
     wb))
-
-
+    

@@ -41,3 +41,15 @@
 (defn product-desc [wave prod-id]
   (:desc (rels/select-single (:products wave) {} :prodid prod-id)))
 
+(defn rank-products
+  [{:keys [scores products requirements]}]
+  (let [total-weight (reduce + 0 (rels/col-seq requirements :wt))
+        data (-> (rels/append requirements (fn [r] {:rel-wt (/ (:wt r) total-weight) :type :requirement }))
+                 (rels/join scores [= :reqtid :reqtid])
+                 (rels/append (fn [rs] {:rel-score (* (:rel-wt rs) (:score rs))}))
+                 (rels/join products [= :prodid :prodid]))
+        ; TODO: if my query had group-by I could derive score, group by, and select prodid and score
+        prod-data (group-by :prodid data)]
+    (map (fn [[prodid rows]] [prodid (reduce #(+ %1 (:rel-score %2)) 0 rows)]) prod-data)))
+
+
