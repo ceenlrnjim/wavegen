@@ -1,4 +1,5 @@
 (ns wavegen.excel
+  (:import [org.apache.poi.ss.usermodel CellStyle])
   (:require [rels]))
 
 (defn ix-to-col
@@ -66,8 +67,8 @@
       { :score-wtd [(sum-reqt-formula :score-wtd)] }}
       ; TODO: headers, subheaders, totals
    :header
-     { :raw ["Weightings" {:mergecnt 4}]
-       :products { :score [:proddesc {:mergecnt 3}] }}
+     { :raw ["Weightings" {:mergecnt 4 :align CellStyle/ALIGN_CENTER}]
+       :products { :score [:proddesc {:mergecnt 3 :align CellStyle/ALIGN_CENTER}] }}
    :subheader
      { :cat ["Category"]
        :subcat ["Sub-Category"]
@@ -123,10 +124,14 @@
     (org.apache.poi.ss.util.CellRangeAddress.  (.getRowNum row) (.getRowNum row) start end)))
 
 (defn make-cell
-  [row cix {:keys [mergecnt]}]
+  [row cix {:keys [mergecnt align]}]
   (let [c (.createCell row cix)]
     ; TODO: other style support
     (when mergecnt (merge-cols row cix (+ cix (- mergecnt 1))))
+    (when align 
+      (let [style (.createCellStyle (.getWorkbook (.getSheet row)))]
+        (.setAlignment style align)
+        (.setCellStyle c style)))
     c))
 
 (defn set-cell-value
@@ -181,4 +186,15 @@
       (let [row (.createRow sheet @rowcounter)]
           (build-row cols prod-cols data {:products (:products wave) :book wb :sheet sheet :row row :wave waverel}))
       (swap! rowcounter + 1))
+    (.setColumnWidth sheet 0 (* 256 2))
+    (.setColumnWidth sheet 1 (* 256 10))
+    (.setColumnWidth sheet 2 (* 256 10))
+    (.setColumnWidth sheet 3 (* 256 50))
+    (.setColumnWidth sheet 4 (* 256 35))
+    (.setColumnWidth sheet 5 (* 256 8))
+    (.setColumnWidth sheet 6 (* 256 8))
+    (.setColumnWidth sheet 7 (* 256 8))
+    (.setColumnWidth sheet 8 (* 256 8))
+    (doseq [i (range 9 (+ 9 (count (:products wave))))]
+      (.setColumnWidth sheet i (* 256 8)))
     wb))
