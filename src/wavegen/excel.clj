@@ -1,6 +1,73 @@
 (ns wavegen.excel
   (:require [rels]))
 
+(defn ix-to-col
+  [c]
+  (str  (get "ABCDEFGHIJKLMNOPQRSTUVWXYZ" c)))
+
+(defn ix-to-row
+  [ix]
+  (inc ix))
+
+(defn relwt-formula
+  [col]
+  (fn [wave data col-ixs]
+    (let [cltr (ix-to-col (get col-ixs col))
+          total (str "SUM(" cltr "1:" cltr "1000)")]
+      (str cltr (ix-to-row (:rownum data)) "/" total))))
+
+(defn row-ids
+  [r pred]
+  (into #{} (-> (rels/select r pred) (rels/col-seq :rownum))))
+
+(defn sum-subcat-formula
+  [col]
+  (fn [wave data col-ixs]
+    (let [cltr (ix-to-col (get col-ixs col))
+          rowids (row-ids wave #(and (= (:type %) :subcategory) (= (:category %) (:category data))))
+          cells (reduce #(str %1 "," %2) (map #(str cltr (ix-to-row %)) rowids))]
+      (str "SUM(" cells ")"))))
+
+(defn sum-reqt-formula
+  [col]
+  (fn [wave data col-ixs]
+    (let [cltr (ix-to-col (get col-ixs col))
+          rowids (row-ids wave #(and (= (:type %) :requirement) (= (:category %) (:category data)) (= (:subcategory %) (:subcategory data))))
+          begid (ix-to-row (apply min rowids))
+          endid (ix-to-row (apply max rowids))]
+      (str "SUM(" cltr begid ":" cltr endid ")"))))
+
+
+(defn infix-binary-formula
+  [op arg1 arg2]
+  (fn [wave data col-ixs]
+    (let [r (ix-to-row (:rownum data))
+          c1 (ix-to-col (get col-ixs arg1))
+          c2 (ix-to-col (get col-ixs arg2))]
+    (str c1 r op c2 r))))
+
+
+(def specs
+  {:requirement 
+    { :reqt [:reqtdesc]
+      :crit [:score-key]
+      :wtd  [(relwt-formula :raw)]
+      :products 
+        { :score-wtd [(infix-binary-formula "*" :score :wtd)] }}
+   :category
+    {:cat [:category {:mergecnt 4}]
+     :cat-wtd [(sum-subcat-formula :sub-wtd)] ;
+     :products 
+      {:score-wtd [(sum-subcat-formula :score-wtd)] }}
+   :subcategory
+    {:subcat [:subcategory {:mergecnt 3}]
+     :sub-wtd [(sum-reqt-formula :wtd)]
+     :products
+      { :score-wtd [(sum-reqt-formula :score-wtd)] }}
+      ; TODO: headers, subheaders, totals
+      })
+
+
 (defn conj-category-rows
   "Adds a row to the relation for each of the categories and subcategories associated with the requirements"
   [waverel]
@@ -24,7 +91,7 @@
   "Combines the data in the specified wave, computes score values, and returns a consolidated relation
    for rendering the wave report"
   [{:keys [products requirements]}]
-     (-> (rels/append requirements (fn [_] {:type :requirement}))
+     (-> (rels/append requirements (fn [t] {:type :requirement :score-key (str (:score-key t))}))
          (rels/join products) ; cartesian - no scores
          (rels/denormalize :scores :prodid :proddesc)                                               ; denormailize to one row per requirement
          (conj-category-rows)                                                                       ; add rows for categories and subcategories
@@ -40,102 +107,64 @@
     (.getSheet row)
     (org.apache.poi.ss.util.CellRangeAddress.  (.getRowNum row) (.getRowNum row) start end)))
 
-; TODO: support for styling (Center, colors, etc)
-(defn make-cells
-  [row ix & specs]
-  (if (empty? specs) nil
-    (let [[t v n] (first specs)
-          c (.createCell row ix)]
-      (if (= t :formula)
-        (.setCellFormula c v))
-        (.setCellValue c v)
-      (when n (merge-cols row ix (+ ix (- n 1))))
-      (apply make-cells row (if n (+ ix n) (inc ix)) (rest specs)))))
+(defn make-cell
+  [row cix {:keys [mergecnt]}]
+  (let [c (.createCell row cix)]
+    ; TODO: other style support
+    (when mergecnt (merge-cols row cix (+ cix (- mergecnt 1))))
+    c))
 
-(defn ix-to-cell
-  [r c]
-  (str  (get "ABCDEFGHIJKLMNOPQRSTUVWXYZ" c) (+ 1 r)))
+(defn set-cell-value
+  [c v]
+  (.setCellValue c v))
 
-(defn cell-list
-  [cs]
-  (reduce #(str %1 "," %2) cs))
+(defn set-cell-formula
+  [c formula]
+  (.setCellFormula c formula))
 
-(defn ix-list
-  [ixs]
-  (cell-list (map #(apply ix-to-cell %) ixs)))
+(defn set-row-contents
+  [row spec col-ixs wave data]
+  (doseq [[k [v styles]] spec]
+    (let [cell (make-cell row (get col-ixs k) styles)]
+      (if (fn? v)
+        (set-cell-formula cell (v wave data col-ixs))
+        (set-cell-value cell (get data v))))))
 
-(defn cell-range
-  [ca cb]
-  (str ca ":" cb))
+(defn prod-col-ixs
+  [prod-num prod-cols other-cols]
+  (apply hash-map
+    (flatten
+      (map-indexed 
+        (fn [ix c]
+          [c (+ ix (count other-cols) prod-num)])
+      prod-cols))))
 
-(defn ix-range
-  [ra ca rb cb]
-  (cell-range (ix-to-cell ra ca) (ix-to-cell rb cb)))
-  
+(defn build-row
+  [cols product-cols data {:keys [products wave row sheet]}]
+  (let [col-ixs (apply hash-map (flatten (map-indexed (comp reverse vector) cols)))
+        spec (get specs (:type data))
+        prod-spec (:products spec)
+        row-spec (dissoc spec :products)]
+    (when spec
+      (set-row-contents row row-spec col-ixs wave data)
+      (doseq [[pi p] (map-indexed vector products)]
+        (println "Setting product " p pi)
+        (set-row-contents row prod-spec 
+          (merge (prod-col-ixs pi product-cols cols) col-ixs) 
+          wave 
+          (merge p data))))))
 
-(defn subcat-rowids
-  [r c]
-  (into #{} 
-    (-> (rels/select r #(and (= (:type %) :subcatgory) (= (:category %) c)))
-      (rels/col-seq :rownum))))
-
-(defn sum-rows-formula
-  [r pred colix]
-  (let [rows (into #{} (-> (rels/select r pred) (rels/col-seq :rownum)))
-        cells (ix-list (map #(vector % colix) rows))]
-    (str "SUM(" cells ")")))
-
-(defn sum-subcats-formula
-  [r cat colix]
-  (sum-rows-formula r #(and (= (:type %) :subcategory) (= (:category %) cat)) colix))
-
-(defn sum-reqts-formula
-  [r c s colix]
-  (sum-rows-formula r #(and (= (:type %) :requirement) (= (:category %) c) (= (:subcategory %) s)) colix))
-   
-
-;(defn reqt-range
-  ;[r c s]
-  ;(-> 
-    ;(rels/select r #(and (= (:type %) :requirement) (= (:subcategory %) s) (= (:category %) c)))
-    ;(rels/col-seq :rownum)
-    ;((fn [s] [(min s) (max s)]))))
-
-
-(defmulti add-cells (fn [ctx data] (:type data)))
-(defmethod add-cells :requirement [ctx data]
-  (make-cells (:row ctx) 3
-    [:value (:reqtdesc data)]
-    [:value (str (:score-key data))])
-  (make-cells (:row ctx) 6 [:formula (str (ix-to-cell (.getRowNum (:row ctx)) 5) "/SUM(F1:F1000)")]))
-
-(defmethod add-cells :header [ctx data]
-  (let [ps (map #(vector :value (:proddesc %) 3) (:scores data))]
-    (apply make-cells (:row ctx) 5 (cons [:value "Weighting" 3] ps))))
-    
-
-(defmethod add-cells :subheader [ctx data]
-  (let [ps (mapcat (fn [_] [[:value "Score"][:value "Notes"][:value "Wgt Score"]]) (:scores data))]
-    (apply make-cells (:row ctx) 1 
-      (concat [[:value "Category"] [:value "Sub-Category"] [:value "Requirement"] [:value "Eval Criteria"] [:value "Raw"] [:value "Wtd"][:value "Sub-cat"][:value "Category"]] ps))))
-
-(defmethod add-cells :category [ctx data]
-  (make-cells (:row ctx) 1 [:value (:category data) 4])
-  (make-cells (:row ctx) 8  [:formula (sum-subcats-formula (:rel ctx) (:category data) 7)]))
-
-(defmethod add-cells :subcategory [ctx data]
-  (make-cells (:row ctx) 2 [:value (:subcategory data) 3])
-  (make-cells (:row ctx) 7  [:formula (sum-reqts-formula (:rel ctx) (:category data) (:subcategory data) 6)]))
 
 (defn gen-xlsx
   [wave]
   (let [wb (org.apache.poi.xssf.usermodel.XSSFWorkbook.)
         sheet (.createSheet wb)
         waverel (build-wave-relation wave)
+        cols [:rownum :cat :subcat :reqt :crit :raw :wtd :sub-wtd :cat-wtd]
+        prod-cols [:score :notes :score-wtd]
         rowcounter (atom 0)]
     (doseq [data waverel]
       (let [row (.createRow sheet @rowcounter)]
-          (add-cells {:book wb :sheet sheet :row row :rel waverel} data))
+          (build-row cols prod-cols data {:products (:products wave) :book wb :sheet sheet :row row :wave waverel}))
       (swap! rowcounter + 1))
     wb))
-    
