@@ -65,6 +65,21 @@
      :products
       { :score-wtd [(sum-reqt-formula :score-wtd)] }}
       ; TODO: headers, subheaders, totals
+   :header
+     { :raw ["Weightings" {:mergecnt 4}]
+       :products { :score [:proddesc {:mergecnt 3}] }}
+   :subheader
+     { :cat ["Category"]
+       :subcat ["Sub-Category"]
+       :reqt ["Requirement"]
+       :crit ["Evaluation Criteria"]
+       :raw ["Abs Wt"]
+       :wtd ["Rel Wt"]
+       :sub-wtd ["Sub-cat"]
+       :cat-wtd ["Categoty"]
+       :products { :score ["Score"] 
+                   :notes ["Notes"]
+                   :score-wtd ["Wtd Score"] }}
       })
 
 
@@ -126,9 +141,9 @@
   [row spec col-ixs wave data]
   (doseq [[k [v styles]] spec]
     (let [cell (make-cell row (get col-ixs k) styles)]
-      (if (fn? v)
-        (set-cell-formula cell (v wave data col-ixs))
-        (set-cell-value cell (get data v))))))
+      (cond (fn? v) (set-cell-formula cell (v wave data col-ixs))
+            (keyword? v) (set-cell-value cell (get data v))
+            :else (set-cell-value cell v)))))
 
 (defn prod-col-ixs
   [prod-num prod-cols other-cols]
@@ -136,7 +151,7 @@
     (flatten
       (map-indexed 
         (fn [ix c]
-          [c (+ ix (count other-cols) prod-num)])
+          [c (+ ix (count other-cols) (* (count prod-cols) prod-num))])
       prod-cols))))
 
 (defn build-row
@@ -148,7 +163,6 @@
     (when spec
       (set-row-contents row row-spec col-ixs wave data)
       (doseq [[pi p] (map-indexed vector products)]
-        (println "Setting product " p pi)
         (set-row-contents row prod-spec 
           (merge (prod-col-ixs pi product-cols cols) col-ixs) 
           wave 
