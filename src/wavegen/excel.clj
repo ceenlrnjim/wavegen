@@ -48,6 +48,9 @@
     (str c1 r op c2 r))))
 
 
+(def shared-columns [:rownum :cat :subcat :reqt :crit :raw :wtd :sub-wtd :cat-wtd])
+(def product-specific-columns [:score :notes :score-wtd])
+
 (def specs
   {:requirement 
     { :reqt [:reqtdesc]
@@ -65,7 +68,7 @@
      :sub-wtd [(sum-reqt-formula :wtd)]
      :products
       { :score-wtd [(sum-reqt-formula :score-wtd)] }}
-      ; TODO: headers, subheaders, totals
+      ; TODO: totals
    :header
      { :raw ["Weightings" {:mergecnt 4 :align CellStyle/ALIGN_CENTER}]
        :products { :score [:proddesc {:mergecnt 3 :align CellStyle/ALIGN_CENTER}] }}
@@ -179,12 +182,14 @@
   (let [wb (org.apache.poi.xssf.usermodel.XSSFWorkbook.)
         sheet (.createSheet wb)
         waverel (build-wave-relation wave)
-        cols [:rownum :cat :subcat :reqt :crit :raw :wtd :sub-wtd :cat-wtd]
-        prod-cols [:score :notes :score-wtd]
         rowcounter (atom 0)]
     (doseq [data waverel]
       (let [row (.createRow sheet @rowcounter)]
-          (build-row cols prod-cols data {:products (:products wave) :book wb :sheet sheet :row row :wave waverel}))
+          (build-row 
+            shared-columns 
+            product-specific-columns 
+            data 
+            {:products (:products wave) :book wb :sheet sheet :row row :wave waverel}))
       (swap! rowcounter + 1))
     (.setColumnWidth sheet 0 (* 256 2))
     (.setColumnWidth sheet 1 (* 256 10))
