@@ -127,11 +127,17 @@
      {:type :subheader :scores products}]
     w))
 
+(defn pretty-map
+  [m]
+  (let [[f & r] (map (fn [[k v]] (str k " - " v)) m)]
+    (reduce #(str %1 "\n" %2) f r)))
+
+
 (defn build-wave-relation
   "Combines the data in the specified wave, computes score values, and returns a consolidated relation
    for rendering the wave report"
   [{:keys [products requirements]}]
-     (-> (rels/append requirements (fn [t] {:type :requirement :score-key (str (:score-key t))}))
+     (-> (rels/append requirements (fn [t] {:type :requirement :score-key (pretty-map (:score-key t))}))
          (rels/join products) ; cartesian - no scores
          (rels/denormalize :scores :prodid :proddesc)                                               ; denormailize to one row per requirement
          (conj-category-rows)                                                                       ; add rows for categories and subcategories
@@ -237,7 +243,7 @@
     (.setColumnWidth sheet 1 (* 256 10))
     (.setColumnWidth sheet 2 (* 256 10))
     (.setColumnWidth sheet 3 (* 256 50))
-    (.setColumnWidth sheet 4 (* 256 35))
+    (.setColumnWidth sheet 4 (* 256 45))
     (.setColumnWidth sheet 5 (* 256 8))
     (.setColumnWidth sheet 6 (* 256 8))
     (.setColumnWidth sheet 7 (* 256 8))
