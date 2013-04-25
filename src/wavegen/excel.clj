@@ -1,6 +1,10 @@
 (ns wavegen.excel
   (:import [org.apache.poi.ss.usermodel CellStyle])
+  (:import [org.apache.poi.xssf.usermodel XSSFColor])
+  (:import [java.awt Color])
   (:require [rels]))
+
+(def styles (atom {}))
 
 (defn ix-to-col
   [c]
@@ -53,37 +57,54 @@
 
 (def specs
   {:requirement 
-    { :reqt [:reqtdesc]
-      :crit [:score-key]
+    { :reqt [:reqtdesc {:style :reqt}]
+      :crit [:score-key {:style :reqt}]
       :wtd  [(relwt-formula :raw)]
       :products 
         { :score-wtd [(infix-binary-formula "*" :score :wtd)] }}
    :category
-    {:cat [:category {:mergecnt 4}]
-     :cat-wtd [(sum-subcat-formula :sub-wtd)] ;
+    {:cat [:category {:mergecnt 4 :style :category-label}]
+     :cat-wtd [(sum-subcat-formula :sub-wtd) {:style :category-value}] ;
+     :rownum ["" {:style :category}]
+     :raw ["" {:style :category}]
+     :wtd ["" {:style :category}]
+     :sub-wtd ["" {:style :category}]
      :products 
-      {:score-wtd [(sum-subcat-formula :score-wtd)] }}
+      {:score-wtd [(sum-subcat-formula :score-wtd) {:style :category-value}]
+        :notes ["" {:style :category}]
+        :score ["" {:style :category}]
+      }}
    :subcategory
-    {:subcat [:subcategory {:mergecnt 3}]
-     :sub-wtd [(sum-reqt-formula :wtd)]
+    {:subcat [:subcategory {:mergecnt 3 :style :subcategory-label}]
+     :sub-wtd [(sum-reqt-formula :wtd) {:style :subcategory-value}]
+     :rownum ["" {:style :subcategory-value}]
+     :cat ["" {:style :subcategory-value}]
+     :raw ["" {:style :subcategory-value}]
+     :wtd ["" {:style :subcategory-value}]
+     :cat-wtd ["" {:style :subcategory-value}]
      :products
-      { :score-wtd [(sum-reqt-formula :score-wtd)] }}
+      { :score-wtd [(sum-reqt-formula :score-wtd) {:style :subcategory-value}]
+        :notes ["" {:style :subcategory-value}]
+        :score ["" {:style :subcategory-value}]
+      }}
       ; TODO: totals
    :header
-     { :raw ["Weightings" {:mergecnt 4 :align CellStyle/ALIGN_CENTER}]
-       :products { :score [:proddesc {:mergecnt 3 :align CellStyle/ALIGN_CENTER}] }}
+     { :rownum ["" {:mergecnt 5 :style :header}]
+       :raw ["Weightings" {:mergecnt 4 :style :header}]
+       :products { :score [:proddesc {:mergecnt 3 :style :header}] }}
    :subheader
-     { :cat ["Category"]
-       :subcat ["Sub-Category"]
-       :reqt ["Requirement"]
-       :crit ["Evaluation Criteria"]
-       :raw ["Abs Wt"]
-       :wtd ["Rel Wt"]
-       :sub-wtd ["Sub-cat"]
-       :cat-wtd ["Categoty"]
-       :products { :score ["Score"] 
-                   :notes ["Notes"]
-                   :score-wtd ["Wtd Score"] }}
+     { :cat ["Category" {:style :header}]
+       :rownum ["" {:style :header}]
+       :subcat ["Sub-Category" {:style :header}]
+       :reqt ["Requirement" {:style :header}]
+       :crit ["Evaluation Criteria" {:style :header}]
+       :raw ["Abs Wt" {:style :header}]
+       :wtd ["Rel Wt" {:style :header}]
+       :sub-wtd ["Sub-cat" {:style :header}]
+       :cat-wtd ["Category" {:style :header}]
+       :products { :score ["Score" {:style :header}] 
+                   :notes ["Notes" {:style :header}]
+                   :score-wtd ["Wtd Score" {:style :header}] }}
       })
 
 
@@ -127,31 +148,22 @@
     (org.apache.poi.ss.util.CellRangeAddress.  (.getRowNum row) (.getRowNum row) start end)))
 
 (defn make-cell
-  [row cix {:keys [mergecnt align]}]
+  [row cix {:keys [mergecnt style]}]
   (let [c (.createCell row cix)]
     ; TODO: other style support
     (when mergecnt (merge-cols row cix (+ cix (- mergecnt 1))))
-    (when align 
-      (let [style (.createCellStyle (.getWorkbook (.getSheet row)))]
-        (.setAlignment style align)
-        (.setCellStyle c style)))
+    (when style
+      (let [cellstyle (get @styles style)]
+        (.setCellStyle c cellstyle)))
     c))
-
-(defn set-cell-value
-  [c v]
-  (.setCellValue c v))
-
-(defn set-cell-formula
-  [c formula]
-  (.setCellFormula c formula))
 
 (defn set-row-contents
   [row spec col-ixs wave data]
   (doseq [[k [v styles]] spec]
     (let [cell (make-cell row (get col-ixs k) styles)]
-      (cond (fn? v) (set-cell-formula cell (v wave data col-ixs))
-            (keyword? v) (set-cell-value cell (get data v))
-            :else (set-cell-value cell v)))))
+      (cond (fn? v) (.setCellFormula cell (v wave data col-ixs))
+            (keyword? v) (.setCellValue cell (get data v))
+            :else (.setCellValue cell v)))))
 
 (defn prod-col-ixs
   [prod-num prod-cols other-cols]
@@ -176,12 +188,42 @@
           wave 
           (merge p data))))))
 
+(defn init-styles
+  [wb]
+  (swap! styles merge 
+  {:header (doto (.createCellStyle wb)
+                  (.setAlignment CellStyle/ALIGN_CENTER)
+                  (.setFillPattern CellStyle/SOLID_FOREGROUND)
+                  (.setWrapText true)
+                  (.setFillForegroundColor (XSSFColor. (Color. (/ 141.0 256) (/ 180.0 256) (/ 226.0 256)))))
+    :category (doto (.createCellStyle wb)
+              (.setFillPattern CellStyle/SOLID_FOREGROUND)
+              (.setFillForegroundColor (XSSFColor. (Color. (/ 197.0 256) (/ 217.0 256) (/ 241.0 256)))))
+    :category-label (doto (.createCellStyle wb)
+              (.setFillPattern CellStyle/SOLID_FOREGROUND)
+              (.setFillForegroundColor (XSSFColor. (Color. (/ 197.0 256) (/ 217.0 256) (/ 241.0 256)))))
+    :category-value (doto (.createCellStyle wb)
+              (.setFillPattern CellStyle/SOLID_FOREGROUND)
+              (.setFillForegroundColor (XSSFColor. (Color. (/ 197.0 256) (/ 217.0 256) (/ 241.0 256))))
+              (.setAlignment CellStyle/ALIGN_CENTER))
+    :subcategory-label (doto (.createCellStyle wb)
+              (.setFillPattern CellStyle/SOLID_FOREGROUND)
+              (.setFillForegroundColor (XSSFColor. (Color. (/ 235.0 256) (/ 241.0 256) (/ 222.0 256)))))
+    :subcategory-value (doto (.createCellStyle wb)
+              (.setFillPattern CellStyle/SOLID_FOREGROUND)
+              (.setFillForegroundColor (XSSFColor. (Color. (/ 235.0 256) (/ 241.0 256) (/ 222.0 256))))
+              (.setAlignment CellStyle/ALIGN_CENTER))
+    :reqt (doto (.createCellStyle wb) (.setWrapText true))
+  }))
+                  
+
 
 (defn gen-xlsx
   [wave]
   (let [wb (org.apache.poi.xssf.usermodel.XSSFWorkbook.)
         sheet (.createSheet wb)
         waverel (build-wave-relation wave)
+        styles (init-styles wb)
         rowcounter (atom 0)]
     (doseq [data waverel]
       (let [row (.createRow sheet @rowcounter)]
@@ -199,7 +241,7 @@
     (.setColumnWidth sheet 5 (* 256 8))
     (.setColumnWidth sheet 6 (* 256 8))
     (.setColumnWidth sheet 7 (* 256 8))
-    (.setColumnWidth sheet 8 (* 256 8))
+    (.setColumnWidth sheet 8 (* 256 9))
     (doseq [i (range 9 (+ 9 (count (:products wave))))]
       (.setColumnWidth sheet i (* 256 8)))
     wb))
