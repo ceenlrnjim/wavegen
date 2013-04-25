@@ -1,5 +1,5 @@
 (ns wavegen.excel
-  (:import [org.apache.poi.ss.usermodel CellStyle IndexedColors])
+  (:import [org.apache.poi.ss.usermodel CellStyle IndexedColors Font])
   (:import [org.apache.poi.xssf.usermodel XSSFColor])
   (:import [java.awt Color])
   (:require [rels]))
@@ -35,6 +35,14 @@
           cells (reduce #(str %1 "," %2) (map #(str cltr (ix-to-row %)) rowids))]
       (str "SUM(" cells ")"))))
 
+(defn sum-cat-formula
+  [col]
+  (fn [wave data col-ixs]
+    (let [cltr (ix-to-col (get col-ixs col))
+          rowids (row-ids wave #(and (= (:type %) :category)))
+          cells (reduce #(str %1 "," %2) (map #(str cltr (ix-to-row %)) rowids))]
+      (str "SUM(" cells ")"))))
+
 (defn sum-reqt-formula
   [col]
   (fn [wave data col-ixs]
@@ -57,6 +65,7 @@
 (def shared-columns [:rownum :cat :subcat :reqt :crit :raw :wtd :sub-wtd :cat-wtd])
 (def product-specific-columns [:score :notes :score-wtd])
 
+; TODO support taking scores from the relation if they're specified?
 (def specs
   {:requirement 
     { :reqt [:reqtdesc {:style :reqt}]
@@ -90,7 +99,10 @@
         :notes ["" {:style :subcategory-value}]
         :score ["" {:style :subcategory-value}]
       }}
-      ; TODO: totals
+   :totals 
+    {:rownum ["Final Score:" {:style :totals :mergecnt 9 :border :top}]
+     :products 
+      { :score [(sum-cat-formula :score-wtd) {:mergecnt 3 :style :totals :border :right }] }}
    :header
      { :rownum ["" {:mergecnt 5 :style :header}]
        :raw ["Weightings" {:mergecnt 4 :style :header}]
@@ -110,6 +122,8 @@
                    :score-wtd ["Wtd Score" {:style :header}] }}
       })
 
+
+; styles are functions so that each cell gets its own instance so that applying borders only impacts that single cell
 (defn init-styles
   [wb]
   (swap! styles merge 
@@ -135,6 +149,9 @@
               (.setFillPattern CellStyle/SOLID_FOREGROUND)
               (.setFillForegroundColor (color 235.0 241.0 222.0))
               (.setAlignment CellStyle/ALIGN_CENTER)))
+    :totals (fn [] (doto (.createCellStyle wb)
+              (.setAlignment CellStyle/ALIGN_RIGHT)
+              (.setFont (doto (.createFont wb) (.setBoldweight Font/BOLDWEIGHT_BOLD)))))
     :reqt (fn [] (doto (.createCellStyle wb) (.setWrapText true)))
   }))
                   
@@ -174,7 +191,7 @@
          (rels/denormalize :scores :prodid :proddesc)
          (conj-category-rows)
          (#(sort-by %2 %1) #(vector (:category %) (:subcategory %) (:reqtdesc %)))
-         ;(conj-totals)
+         (#(concat %1 [{:type :totals :scores products}])); add line for totals
          (cons-headers products)
          (#(map-indexed (fn [ix r] (assoc r :rownum ix)) %1))))
 
@@ -187,17 +204,18 @@
 (defn set-border
   [cs side]
   (let [bs CellStyle/BORDER_THIN
-        bc (.getIndex IndexedColors/BLACK)]
-    (condp = side
-      :top (doto cs (.setBorderTop bs) (.setTopBorderColor bc))
-      :bottom (doto cs (.setBorderBottom bs) (.setBottomBorderColor bc))
-      :left (doto cs (.setBorderLeft bs) (.setLeftBorderColor bc))
-      :right (doto cs (.setBorderRight bs) (.setRightBorderColor bc)))))
+        bc (.getIndex IndexedColors/BLACK)
+        sides (if (set? side) side (hash-set side))]
+    (doseq [s sides]
+      (condp = s
+        :top (doto cs (.setBorderTop bs) (.setTopBorderColor bc))
+        :bottom (doto cs (.setBorderBottom bs) (.setBottomBorderColor bc))
+        :left (doto cs (.setBorderLeft bs) (.setLeftBorderColor bc))
+        :right (doto cs (.setBorderRight bs) (.setRightBorderColor bc))))))
 
 (defn make-cell
   [row cix {:keys [mergecnt style border]}]
   (let [c (.createCell row cix)]
-    ; TODO: other style support
     (when mergecnt (merge-cols row cix (+ cix (- mergecnt 1))))
     (when style
       (let [cellstyle ((get @styles style))]
