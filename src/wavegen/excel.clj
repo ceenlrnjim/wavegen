@@ -33,20 +33,7 @@
     (let [cltr (ix2c (get col-ixs col))
           rowids (row-ids wave (apply type-pred rowtype data kvs))
           cells (reduce #(str %1 "," %2) (map #(str cltr (ix2r %)) rowids))]
-      (str op "(" cells ")"))))
-
-(defn sum-subcat-formula
-  [col]
-  (items-formula col "SUM" :subcategory :category))
-
-(defn sum-cat-formula
-  [col]
-  (items-formula col "SUM" :category))
-
-(defn sum-reqt-formula
-  [col]
-  (items-formula col "SUM" :requirement :subcategory :category))
-
+      (str op "(" cells ")")))) ; do I want to support range here?
 
 (defn infix-binary-formula
   [op arg1 arg2]
@@ -71,33 +58,33 @@
         { :score-wtd [(infix-binary-formula "*" :score :wtd) { :style :reqt :border :right}] }}
    :category
     {:cat [:category {:mergecnt 4 :style :category-label}]
-     :cat-wtd [(sum-subcat-formula :sub-wtd) {:style :category-value :border :right}] ;
+     :cat-wtd [(items-formula :sub-wtd "SUM" :subcategory :category) {:style :category-value :border :right}] ;
      :rownum ["" {:style :category}]
      :raw ["" {:style :category}]
      :wtd ["" {:style :category}]
      :sub-wtd ["" {:style :category}]
      :products 
-      {:score-wtd [(sum-subcat-formula :score-wtd) {:style :category-value :border :right}]
+      {:score-wtd [(items-formula :score-wtd "SUM" :subcategory :category) {:style :category-value :border :right}]
         :notes ["" {:style :category}]
         :score ["" {:style :category}]
       }}
    :subcategory
     {:subcat [:subcategory {:mergecnt 3 :style :subcategory-label}]
-     :sub-wtd [(sum-reqt-formula :wtd) {:style :subcategory-value}]
+     :sub-wtd [(items-formula :wtd "SUM" :requirement :subcategory :category) {:style :subcategory-value}]
      :rownum ["" {:style :subcategory-value}]
      :cat ["" {:style :subcategory-value}]
      :raw ["" {:style :subcategory-value}]
      :wtd ["" {:style :subcategory-value}]
      :cat-wtd ["" {:style :subcategory-value :border :right}]
      :products
-      { :score-wtd [(sum-reqt-formula :score-wtd) {:style :subcategory-value :border :right}]
+      { :score-wtd [(items-formula :score-wtd "SUM" :requirement :subcategory :category) {:style :subcategory-value :border :right}]
         :notes ["" {:style :subcategory-value}]
         :score ["" {:style :subcategory-value}]
       }}
    :totals 
     {:rownum ["Final Score:" {:style :totals :mergecnt 9 :border :top}]
      :products 
-      { :score [(sum-cat-formula :score-wtd) {:mergecnt 3 :style :totals :border :right }] }}
+      { :score [(items-formula :score-wtd "SUM" :category) {:mergecnt 3 :style :totals :border :right }] }}
    :header
      { :rownum ["" {:mergecnt 5 :style :header}]
        :raw ["Weightings" {:mergecnt 4 :style :header}]
@@ -117,37 +104,31 @@
                    :score-wtd ["Wtd Score" {:style :header}] }}
       })
 
+(defn mkstylefn
+  [wb {:keys [bold rgb align wrap]}]
+  (fn [] 
+    (let [cs (.createCellStyle wb)]
+      (when bold (.setFont cs (doto (.createFont wb) (.setBoldweight Font/BOLDWEIGHT_BOLD))))
+      (when wrap (.setWrapText cs wrap))
+      (when rgb (.setFillPattern cs CellStyle/SOLID_FOREGROUND)
+                (.setFillForegroundColor cs (apply color rgb)))
+      (when align (condp = align :center (.setAlignment cs CellStyle/ALIGN_CENTER)
+                                 :right (.setAlignment cs CellStyle/ALIGN_RIGHT)))
+      cs)))
+
 
 ; styles are functions so that each cell gets its own instance so that applying borders only impacts that single cell
 (defn init-styles
   [wb]
   (swap! styles merge 
-  {:header (fn [] (doto (.createCellStyle wb)
-                  (.setAlignment CellStyle/ALIGN_CENTER)
-                  (.setFillPattern CellStyle/SOLID_FOREGROUND)
-                  (.setWrapText true)
-                  (.setFillForegroundColor (color 141.0 180.0 226.0 ))))
-    :category (fn [] (doto (.createCellStyle wb)
-              (.setFillPattern CellStyle/SOLID_FOREGROUND)
-              (.setFillForegroundColor (color 197.0 217.0 241.0))))
-    :category-label (fn [] (doto (.createCellStyle wb)
-              (.setFillPattern CellStyle/SOLID_FOREGROUND)
-              (.setFillForegroundColor (color 197.0 217.0 241.0))))
-    :category-value (fn [] (doto (.createCellStyle wb)
-              (.setFillPattern CellStyle/SOLID_FOREGROUND)
-              (.setFillForegroundColor (color 197.0 217.0 241.0))
-              (.setAlignment CellStyle/ALIGN_CENTER)))
-    :subcategory-label (fn [] (doto (.createCellStyle wb)
-              (.setFillPattern CellStyle/SOLID_FOREGROUND)
-              (.setFillForegroundColor (color 235.0 241.0 222.0))))
-    :subcategory-value (fn [] (doto (.createCellStyle wb)
-              (.setFillPattern CellStyle/SOLID_FOREGROUND)
-              (.setFillForegroundColor (color 235.0 241.0 222.0))
-              (.setAlignment CellStyle/ALIGN_CENTER)))
-    :totals (fn [] (doto (.createCellStyle wb)
-              (.setAlignment CellStyle/ALIGN_RIGHT)
-              (.setFont (doto (.createFont wb) (.setBoldweight Font/BOLDWEIGHT_BOLD)))))
-    :reqt (fn [] (doto (.createCellStyle wb) (.setWrapText true)))
+  {:header (mkstylefn wb {:align :center :wrap true :rgb [141.0 180.0 226.0]})
+   :category (mkstylefn wb {:rgb [197.0 217.0 241.0]})
+   :category-label (mkstylefn wb {:rgb [197.0 217.0 241.0]})
+   :category-value (mkstylefn wb {:align :center :rgb [197.0 217.0 241.0]})
+   :subcategory-label (mkstylefn wb {:rgb [235.0 241.0 222.0]})
+   :subcategory-value (mkstylefn wb {:align :center :rgb [235.0 241.0 222.0]})
+   :totals (mkstylefn wb {:align :right :bold true})
+   :reqt (mkstylefn wb {:wrap true})
   }))
                   
 
