@@ -45,6 +45,7 @@
 
 
 (def shared-columns [:rownum :cat :subcat :reqt :crit :raw :wtd :sub-wtd :cat-wtd])
+(def column-widths [2 10 10 50 45 8 8 8 9])
 (def product-specific-columns [:score :notes :score-wtd])
 
 ; TODO support taking scores from the relation if they're specified?
@@ -207,7 +208,7 @@
     prod-cols)))
 
 (defn build-row
-  [cols product-cols data {:keys [products wave row sheet]}]
+  [cols product-cols data {:keys [products wave row]}]
   (let [col-ixs (into {} (map-indexed (comp vec reverse vector) cols))
         spec (get specs (:type data))
         prod-spec (:products spec)
@@ -232,7 +233,7 @@
       (let [row (.createRow sheet rowcounter)]
         (build-row shared-columns product-specific-columns data 
           {:products (:products wave) :book wb :sheet sheet :row row :wave waverel})))
-    (doseq [[i c] (ix-seq [2 10 10 50 45 8 8 8 9])]
+    (doseq [[i c] (ix-seq column-widths)]
       (.setColumnWidth sheet i (* 256 c)))
     (doseq [i (range 9 (+ 9 (count (:products wave))))]
       (.setColumnWidth sheet i (* 256 8)))
