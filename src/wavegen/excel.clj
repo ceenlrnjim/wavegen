@@ -7,7 +7,13 @@
 (def styles (atom {}))
 
 (defn color [r g b] (XSSFColor. (Color. (float (/ r 256.0)) (/ g 256.0) (/ b 256.0))))
-(defn ix2c [c] (str  (get "ABCDEFGHIJKLMNOPQRSTUVWXYZ" c)))
+
+(defn ix2c [c] 
+  (let [alpha "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        p (get alpha (- (int (/ c 26)) 1)) 
+        s (get alpha (mod c 26)) ]
+   (str p s)))
+
 (defn ix2r [ix] (inc ix))
 (defn ix-seq [s] (map-indexed vector s))
 
